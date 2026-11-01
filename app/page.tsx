@@ -417,7 +417,35 @@ function Board({ edges, agents, selected, locked, elapsed, faults, onNode }: {
     else return;
     event.preventDefault(); setCursor({ grid, node: `${x}:${y}` });
   }
-  return <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />;
+  const movePost = (dx: number, dy: number) => {
+    setCursor((previous) => {
+      const point = parseNode(previous.node);
+      const x = Math.max(0, Math.min(POST_COLS - 1, point.x + dx));
+      const y = Math.max(0, Math.min(POST_ROWS - 1, point.y + dy));
+      return { grid: previous.grid, node: `${x}:${y}` };
+    });
+  };
+  const point = parseNode(cursor.node);
+  return <>
+    <div className="mobile-post-controls" role="group" aria-label="Navegación precisa de postes">
+      <div className="mobile-post-control-heading">
+        <strong>CONTROL PRECISO DEL PLANO</strong>
+        <output aria-live="polite">Zona {cursor.grid === 0 ? "migraciones" : "seguridad"} · poste {cursor.node}</output>
+      </div>
+      <div className="mobile-post-dpad" role="group" aria-label="Mover el poste enfocado">
+        <button type="button" className="up" aria-label="Mover al poste de arriba" disabled={point.y === 0} onClick={() => movePost(0, -1)}>↑</button>
+        <button type="button" className="left" aria-label="Mover al poste de la izquierda" disabled={point.x === 0} onClick={() => movePost(-1, 0)}>←</button>
+        <button type="button" className="right" aria-label="Mover al poste de la derecha" disabled={point.x === POST_COLS - 1} onClick={() => movePost(1, 0)}>→</button>
+        <button type="button" className="down" aria-label="Mover al poste de abajo" disabled={point.y === POST_ROWS - 1} onClick={() => movePost(0, 1)}>↓</button>
+      </div>
+      <div className="mobile-post-actions">
+        <button type="button" aria-label="Cambiar zona del plano" onClick={() => setCursor((previous) => ({ ...previous, grid: previous.grid === 0 ? 1 : 0 }))}>Cambiar zona</button>
+        <button type="button" className="select-post" aria-label="Seleccionar poste enfocado" onClick={() => onNode(cursor.grid, cursor.node)}>{locked ? "Inspeccionar poste" : "Usar este poste"}</button>
+      </div>
+      <p>Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños.</p>
+    </div>
+    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
+  </>;
 }
 
 function safeRead(key: string) {
