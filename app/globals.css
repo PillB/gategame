@@ -174,3 +174,11 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation:none!important;transition:none!important}
 }
+
+/* A shared challenge is comparable only while its original map fingerprint matches. */
+.challenge-ribbon{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid #40535b;background:#20343b;color:#e6f2f4;font-size:12px;line-height:1.5}
+.challenge-ribbon b{font:700 11px var(--font-mono);letter-spacing:.05em;color:#cff49d}
+.challenge-ribbon span{flex:1;min-width:220px}
+.next-experiment{grid-column:1/-1;margin:0;padding:12px 14px;border:1px solid #526a6f;border-radius:8px;background:#263b40;color:#e1edf0;font-size:12px;line-height:1.5}
+.next-experiment strong{display:block;margin-bottom:4px;letter-spacing:.06em;font:700 11px var(--font-mono);color:#d6f49a}
+@media(max-width:720px){.challenge-ribbon{align-items:flex-start;flex-direction:column;gap:4px}.challenge-ribbon span{min-width:0}.next-experiment{padding:12px}}

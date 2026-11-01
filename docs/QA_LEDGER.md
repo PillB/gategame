@@ -81,3 +81,23 @@ This ledger distinguishes **source tests**, **local interactive observations**, 
 - [ ] Human: a tester confirms clarity, fun, fairness, feedback, accessibility and next-step affordance; log findings, fix, retest.
 
 Do not equate a checked box with complete combinatorial coverage. The mathematical state space includes far more belt arrangements than can be exhaustively clicked; use property tests, covering arrays, deterministic seeds and targeted adversarial setups.
+
+## Follow-up release ledger — challenge-and-coaching branch (31 October 2026 Peru)
+
+Source baseline: `a0b71646b9cec9a05da1329bc954afd976b40db6`. This section supersedes the stale 'first public commit pending' metadata above. Latest confirmed `main` GitHub CI: run `41259242890` **PASS** (the earlier run failed due to missing shell executable bits). GitHub Pages site `https://pillb.github.io/gategame/` remained unpublished / 404 at previous browser check. No UAT or privacy change.
+
+| ID | Status | Evidence and falsifiable closure |
+| --- | --- | --- |
+| P0-PAGES | BLOCKED | Repository must be configured to publish from GitHub Actions; dispatch manually after tested source lands on `main`. PASS only on successful Pages deployment plus 200 response and exact SHA in browser. |
+| P0-PR-CI | RECHECKING | First PR run 41264399812 passed all checks (46 mechanics/challenge tests); a newer run must pass after the unwinnable-challenge correction. |
+| VIR-URL | IMPLEMENTED, RECHECKING CI | `lib/challenges.js` builds `layout` + `beat` URL and strips third-party query/hash; `tests/challenges.test.mjs` covers strict boundary/error inputs. |
+| VIR-RECEIVER | IMPLEMENTED, NOT YET VERIFIED IN BROWSER | `app/page.tsx` uses shared layout as a starting point; belt edits retain the target, preset replacement exits the challenge; compares win/tie/loss after completion. |
+| FUN-COACH | IMPLEMENTED, NOT YET VERIFIED IN BROWSER | One prioritized, observable next-round experiment in debrief. Verify it fits within 390 px viewport and explains next action without claiming guaranteed win. |
+| FULL-ENGINE | BLOCKED | Previous isolated local candidate reportedly had full-round state invariants; its changes are not part of this GitHub branch. The GitHub `main` source still needs that engine/refactor and associated tests before full release claim. |
+| ACCESSIBILITY | NOT TESTED LIVE | Screenshot contrast, keyboard, assistive access, mobile debrief and reduced-motion manual matrix. |
+| USER-UAT | NOT STARTED | Invite owner only after deployed SHA regression and no P0 blockers; do not privatize until owner agrees. |
+
+See [GROWTH_AND_PLAYTEST.md](./GROWTH_AND_PLAYTEST.md) for research, the acceptance matrix, and non-coercive sharing design.
+
+### Critical design correction (PR #1)
+A fixed seed with unchanged belts has a fixed score. Requiring the exact shared layout for a win would make a score-to-beat challenge unwinnable. The receiver must be able to modify the **starting** layout and still compete against the original score. Falsifiable test: identical layout ties; modified layout can win, tie or lose, and selecting an unrelated preset exits the challenge. This correction is source-implemented and awaiting final PR CI and deployed browser evidence.

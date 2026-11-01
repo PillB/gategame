@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { challengePrompt, createChallengeUrl, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -422,18 +423,24 @@ export default function Home() {
   const [bestScore, setBestScore] = useState(0);
   const [copied, setCopied] = useState(false);
   const [shareFallback, setShareFallback] = useState<string | null>(null);
+  const [challengeTarget, setChallengeTarget] = useState<{ score: number; fingerprint: string } | null>(null);
   const edgeRef = useRef(edges);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const challenge = decodeLayout(new URLSearchParams(window.location.search).get("layout") ?? "", POST_COLS, POST_ROWS);
+      const query = new URLSearchParams(window.location.search);
+      const challenge = decodeLayout(query.get("layout") ?? "", POST_COLS, POST_ROWS);
       let restored: [Edge[], Edge[]] | null = challenge as [Edge[], Edge[]] | null;
       if (!restored) {
         try { restored = sanitizeLayoutGroups(JSON.parse(safeRead("gateflow-layout-v2") ?? "null"), POST_COLS, POST_ROWS) as [Edge[], Edge[]] | null; } catch { restored = null; }
       }
       if (restored) {
         setEdges(restored);
-        if (challenge) setMessage("Desafío compartido cargado. Juega con este diseño y luego ajusta una cinta.");
+        if (challenge) {
+          const targetScore = parseChallengeScore(query.get("beat"));
+          if (targetScore !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
+          setMessage("Reto recibido: modifica las cintas para superar la puntuación original.");
+        }
       }
       const savedBest = Number(safeRead("gateflow-best-v2") ?? 0);
       if (Number.isFinite(savedBest)) setBestScore(Math.max(0, Math.min(1000, savedBest)));
@@ -464,6 +471,9 @@ export default function Home() {
   const rank = rankShift(score);
   const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: sim.elapsed, target: TARGET });
   const fingerprint = layoutFingerprint(edges);
+  const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
+  const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
+  const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: sim.elapsed, queueSwitches: sim.queueSwitches, score }) : null;
   const flowMood = finished ? (score >= 850 ? "glow" : "settled") : queued <= 2 ? "calm" : queued <= 6 ? "steady" : "pressure";
   const flowLabel = finished ? (score >= 850 ? "FLUJO DOMINADO" : "TURNO FINALIZADO") : flowMood === "calm" ? "FLUJO TRANQUILO" : flowMood === "steady" ? "FLUJO ESTABLE" : "AUMENTA LA PRESIÓN";
   const isNewBest = finished && score > bestScore;
@@ -534,15 +544,14 @@ export default function Home() {
   }
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (layoutLocked) return;
-    commitBest(); setSim(blank());
+    commitBest(); setSim(blank()); setChallengeTarget(null);
     setEdges(mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []]);
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
   }
   async function copyScorecard() {
-    const url = new URL(window.location.href);
-    url.search = ""; url.searchParams.set("layout", encodeLayout(edges, POST_COLS, POST_ROWS));
-    const card = createShareCard({ score, rank, processed: sim.cleared, target: TARGET, elapsed: sim.elapsed, abandoned: sim.abandoned, retries: sim.retries, fingerprint, url: url.toString() });
+    const url = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score);
+    const card = createShareCard({ score, rank, processed: sim.cleared, target: TARGET, elapsed: sim.elapsed, abandoned: sim.abandoned, retries: sim.retries, fingerprint, url });
     let didCopy = false;
     try { await navigator.clipboard.writeText(card); didCopy = true; } catch {
       const field = document.createElement("textarea");
@@ -578,6 +587,7 @@ export default function Home() {
           </div>
         </div>
         <div className="scenario-banner"><span>CADENA DE RELEVOS</span><b>{POST_COLS * POST_ROWS} postes por zona · {CELL_COLS * CELL_ROWS} celdas transitables</b><small>Los módulos cierran para el relevo y la preparación; reabren con otra velocidad. Los pasajeros buscan filas cercanas más cortas.</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
+        {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
           <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
@@ -588,6 +598,7 @@ export default function Home() {
             <div className="debrief-copy"><p className="label">RESUMEN DEL TURNO · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD PERSONAL</span>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
+            {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {nextExperiment}</p>}
             <div className="debrief-actions"><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}
           </section>}
