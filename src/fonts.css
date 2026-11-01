@@ -1,0 +1,22 @@
+/* Relative URLs are bundled by Vite. Do not import generated Vinext CSS:
+   it embeds absolute /workspace/sites/... font paths. */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../.vinext/fonts/geist-8ac0455e797f/geist-98bbbccb.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../.vinext/fonts/geist-mono-00e989178794/geist-mono-013b2f2f.woff2") format("woff2");
+}
+
+:root {
+  --font-sans: "Geist";
+  --font-mono: "Geist Mono";
+}

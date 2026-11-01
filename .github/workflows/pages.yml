@@ -1,0 +1,61 @@
+name: Publish GitHub Pages test site
+
+# Public deployment is deliberately manual. No push or pull request publishes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gateflow-pages
+  cancel-in-progress: false
+
+jobs:
+  verify-and-package:
+    if: github.ref == 'refs/heads/main'
+    name: Verify and package the public test build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install from the lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Type-check the Pages gameplay/adapter
+        run: npm run typecheck:pages
+      - name: Test simulation and original Sites Worker
+        run: npm test
+      - name: Build and test the static Pages artifact
+        run: npm run test:pages
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+      - name: Upload static Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: dist/pages
+
+  deploy:
+    name: Deploy vetted test site
+    needs: verify-and-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy public test site
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
