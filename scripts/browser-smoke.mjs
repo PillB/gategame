@@ -160,6 +160,30 @@ try{
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947')");
   await screenshot("07-shared-challenge");
+  // Keyboard-equivalent mobile D-pad bypasses sub-44px map post spacing.
+  const mobileButton = async (label) => {
+    const expression="(()=>{const b=[...document.querySelectorAll('.mobile-post-controls button')].find(x=>x.getAttribute('aria-label')==="+JSON.stringify(label)+");if(!b||b.disabled)return false;b.click();return true})()";
+    assert.equal(await evaluate(expression),true,"Mobile post control missing: "+label);
+    await sleep(85);
+  };
+  const mobileButtons = await evaluate("([...document.querySelectorAll('.mobile-post-controls button')].map(b=>({label:b.getAttribute('aria-label'),height:b.getBoundingClientRect().height,width:b.getBoundingClientRect().width})))");
+  assert.equal(mobileButtons.length,6,"Expected D-pad, zone and post selection");
+  assert.ok(mobileButtons.every(b=>b.width>=43.5&&b.height>=43.5),JSON.stringify(mobileButtons));
+  const emptyFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  await mobileButton("Seleccionar poste enfocado");
+  await mobileButton("Mover al poste de arriba");
+  await mobileButton("Seleccionar poste enfocado");
+  const changedFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  assert.notEqual(emptyFingerprint,changedFingerprint,"D-pad did not create a belt");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent"),/Cinta de borde conectada/);
+  await screenshot("08-mobile-post-precision");
+  await mobileButton("Seleccionar poste enfocado");
+  await mobileButton("Mover al poste de abajo");
+  await mobileButton("Seleccionar poste enfocado");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),emptyFingerprint,"D-pad did not remove the belt");
+  await mobileButton("Cambiar zona del plano");
+  assert.match(await evaluate("document.querySelector('.mobile-post-control-heading')?.textContent"),/seguridad/i);
+
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=1001"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);
