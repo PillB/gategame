@@ -196,6 +196,9 @@ test("share cards are concise, challenge-oriented, and contain no passenger narr
   assert.match(card, /¿Tus cintas superan a las mías\?/);
   assert.ok(card.length < 240);
   assert.doesNotMatch(card, /pasaporte|seguridad|migraciones/i);
+  const perfect=createShareCard({score:1000,rank:{grade:"S",title:"Arquitecto del flujo"},processed:25,target:28,elapsed:42.9,abandoned:0,retries:0,fingerprint:"GF42QZ",url:"https://example.test"});
+  assert.match(perfect,/igualar mis 1000 puntos perfectos/);
+  assert.doesNotMatch(perfect,/superan a las mías/);
 });
 
 test("pace control remains bounded and preserves simulation time", () => {

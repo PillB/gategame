@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { queueWalkLane, scoreShiftBreakdown, simulationInterval } from "../lib/simulation.js";
+import { ROUNDS, arrivalAt, scoredElapsed } from "../lib/rounds.js";
 
 // Compile the ACTUAL simulation functions from the shipped UI, not a second,
 // potentially divergent implementation. React is never mounted in this test.
@@ -19,6 +20,7 @@ const output = ts.transpileModule(source, { fileName: "page.tsx", compilerOption
 const sandbox = { exports: {}, module: { exports: {} }, require: (id) => {
   if (id === "@/lib/simulation.js") return require("../lib/simulation.js");
   if (id === "@/lib/challenges.js") return require("../lib/challenges.js");
+  if (id === "@/lib/rounds.js") return require("../lib/rounds.js");
   return require(id);
 }};
 sandbox.module.exports = sandbox.exports;
@@ -39,17 +41,41 @@ const REPAIRED_BASELINES = Object.freeze({
   serpentine: { score: 946, repairs: 2, elapsed: 65.9 },
   "open-floor": { score: 933, repairs: 0, elapsed: 47.8 },
 });
+const MISSION_BASELINES = Object.freeze({
+  r04: {
+    guided: {elapsed:59.2,cleared:25,abandoned:0,score:856},
+    serpentine: {elapsed:75.1,cleared:25,abandoned:0,score:822},
+    "open-floor": {elapsed:59.5,cleared:25,abandoned:0,score:932},
+  },
+  r05: {
+    guided: {elapsed:39.3,cleared:25,abandoned:0,score:866},
+    serpentine: {elapsed:63.1,cleared:25,abandoned:0,score:782},
+    "open-floor": {elapsed:39.9,cleared:24,abandoned:1,score:810},
+  },
+});
 
 
-function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
+function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "classic" } = {}) {
   let state = { ...blank(), running: true };
   let walkingSeen = 0;
   let switchesInferred = 0;
+  const landings = [];
+  const landingTimes = [];
+  const announcements = new Set();
   for (let step = 0; step < maxTicks; step++) {
     if (flagFaults) state = { ...state, faults: state.faults.map(f => ({ ...f, flagged: true })) };
     const prior = new Map(state.agents.map(a => [a.id, a]));
     const previous = state;
-    const next = tick(state, layout);
+    const next = tick(state, layout, roundId);
+    for (const event of next.events) if (event.id.endsWith("-landing")) announcements.add(event.id);
+
+    if (next.spawned > previous.spawned) {
+      for (let i = previous.spawned; i < next.spawned; i++) {
+        assert.ok(next.elapsed >= arrivalAt(roundId, i) - 1e-7, "Passenger arrived before the advertised flight");
+        landings.push(i);
+        landingTimes.push(next.elapsed);
+      }
+    }
 
     assert.equal(next.spawned, next.agents.length, "No duplicated/lost passenger objects");
     assert.equal(next.spawned, next.agents.filter(a => !terminal.has(a.stage)).length +
@@ -58,6 +84,8 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
     assert.ok(next.retries >= previous.retries && next.repairs >= previous.repairs);
     assert.ok(next.queueSwitches >= previous.queueSwitches);
     assert.ok(next.repairs <= next.faults.length, "Cannot repair more belts than fault events");
+    assert.equal(new Set(next.events.map((item)=>item.id)).size,next.events.length,
+      "Incident feed contains duplicate React keys (can leave ghost DOM events)");
 
     const ids = new Set();
     const busy = new Set();
@@ -94,12 +122,12 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
     if (!state.running) {
       assert.equal(state.spawned, TARGET, "Premature game completion");
       assert.equal(state.cleared + state.failed + state.turnedAway + state.abandoned, TARGET);
-      const score = scoreShiftBreakdown({processed:state.cleared,elapsed:state.elapsed,
+      const score = scoreShiftBreakdown({processed:state.cleared,elapsed:scoredElapsed(roundId, state.elapsed),
         retries:state.retries,target:TARGET,turnedAway:state.turnedAway,
         abandoned:state.abandoned,complete:true,smartSwitches:state.queueSwitches,
         repairs:state.repairs,faultsLeft:state.faults.filter(f=>!f.repaired).length});
       assert.ok(score.total>=0 && score.total<=1000);
-      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total };
+      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, landingTimes, announcements: [...announcements] };
     }
   }
   assert.fail("Round did not resolve within "+(maxTicks*DT)+" simulated seconds");
@@ -154,4 +182,71 @@ test("faults flagged on detection never break conservation or deterministic comp
       repaired.state.elapsed !== baseline.state.elapsed,
       "Repairing faults unexpectedly lowered score with identical throughput/time");
   }
+});
+
+test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layout variants", () => {
+  for (const round of ROUNDS.filter((item) => item.id !== "classic")) {
+    assert.equal(round.arrivals.length, TARGET);
+    assert.equal(round.waves.reduce((sum, wave) => sum + wave.count, 0), TARGET);
+    assert.ok(round.title && round.story && round.decision && round.payoff);
+    assert.ok(round.waves.every((wave, index) => index === 0 || wave.at > round.waves[index-1].at));
+    for (const [name, layout] of scenarios) {
+      const first = fullRound(layout, { roundId: round.id });
+      const second = fullRound(layout, { roundId: round.id });
+      assert.equal(JSON.stringify(first.state), JSON.stringify(second.state), `Replay diverged: ${round.id}/${name}`);
+      assert.deepEqual(first.landings, Array.from({length:TARGET},(_,i)=>i));
+      let waveFirstIndex=0;
+      for (const wave of round.waves) {
+        assert.ok(Math.abs(first.landingTimes[waveFirstIndex]-Math.max(DT,wave.at))<1e-7,
+          `${round.id} landing ${wave.at}s delayed by floating-point accumulation`);
+        waveFirstIndex+=wave.count;
+      }
+      assert.equal(first.announcements.length, round.waves.length, `Missing whimsical announcement: ${round.id}/${name}`);
+      assert.ok(first.walkingSeen > 0, `Walking stages missing: ${round.id}/${name}`);
+      assert.equal(first.score, second.score);
+      assert.ok(first.state.elapsed >= round.arrivals.at(-1));
+      assert.equal(first.state.cleared + first.state.failed + first.state.turnedAway + first.state.abandoned, TARGET);
+      assert.deepEqual({elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,
+        abandoned:first.state.abandoned,score:first.score},MISSION_BASELINES[round.id][name],
+        `Balance regression must update the explicit ${round.id}/${name} snapshot`);
+      console.info("GATEFLOW_NEW_ROUND "+JSON.stringify({round:round.id,preset:name,
+        elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,abandoned:first.state.abandoned,
+        score:first.score,walking:first.walkingSeen}));
+    }
+  }
+});
+
+test("a single player belt edit has a causal, reproducible effect in each new mission", () => {
+  for (const roundId of ["r04","r05"]) {
+    const base = fullRound(GUIDED,{roundId});
+    const variants = GUIDED.flatMap((group,grid)=>group.map((edge,index)=>{
+      const layout = GUIDED.map((edges)=>edges.map((item)=>({...item})));
+      layout[grid].splice(index,1);
+      const outcome = fullRound(layout,{roundId});
+      return {removed:`${grid}:${edge.from}>${edge.to}`,score:outcome.score,
+        cleared:outcome.state.cleared,abandoned:outcome.state.abandoned,
+        retries:outcome.state.retries,elapsed:+outcome.state.elapsed.toFixed(1)};
+    }));
+    assert.ok(variants.some((candidate)=>candidate.score!==base.score),
+      `${roundId} all one-belt changes were cosmetic`);
+    assert.ok(new Set(variants.map((item)=>item.score)).size>=2,
+      `${roundId} all modified layouts produced the same score`);
+    console.info("GATEFLOW_CAUSAL_BELT "+JSON.stringify({roundId,baseScore:base.score,
+      highest:variants.reduce((a,b)=>a.score>=b.score?a:b),
+      lowest:variants.reduce((a,b)=>a.score<=b.score?a:b)}));
+  }
+});
+
+test("arrival complication flips which starter layout performs better (non-cosmetic interaction)", () => {
+  const r04Guided=fullRound(GUIDED,{roundId:"r04"}).score;
+  const r04Open=fullRound([[],[]],{roundId:"r04"}).score;
+  const r05Guided=fullRound(GUIDED,{roundId:"r05"}).score;
+  const r05Open=fullRound([[],[]],{roundId:"r05"}).score;
+  const openAdvantageR04=r04Open-r04Guided;
+  const openAdvantageR05=r05Open-r05Guided;
+  assert.equal(openAdvantageR04,76);
+  assert.equal(openAdvantageR05,-56);
+  assert.equal(openAdvantageR04-openAdvantageR05,132);
+  console.info("GATEFLOW_STRATEGY_CROSSOVER "+JSON.stringify({r04:{guided:r04Guided,open:r04Open},
+    r05:{guided:r05Guided,open:r05Open},interaction:132}));
 });

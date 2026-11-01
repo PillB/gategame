@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
+import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeRound, parseChallengeScore } from "@/lib/challenges.js";
+import { arrivalAt, DEFAULT_ROUND, getRound, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -174,7 +175,7 @@ function allocate(agents: Agent[], phase: 1 | 2, rates: number[], closed: number
   return next;
 }
 
-function tick(state: Sim, edges: [Edge[], Edge[]]): Sim {
+function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim {
   if (!state.running) return state;
   const elapsed = state.elapsed + DT;
   let spawned = state.spawned, nextSpawn = state.nextSpawn, agents = [...state.agents], events = [...state.events];
@@ -201,7 +202,18 @@ function tick(state: Sim, edges: [Edge[], Edge[]]): Sim {
     return { ...fault, repaired: true };
   });
   const liveEdges = effectiveEdges(edges, faults), closed: [number[], number[]] = [closedLanes(elapsed, 0), closedLanes(elapsed, 1)], rates = dynamicRates(elapsed);
-  while (spawned < TARGET && elapsed >= nextSpawn) { agents.push(makeAgent(spawned, liveEdges)); spawned++; nextSpawn += 0.72; }
+  // One landing announcement per *integer tick*. An elapsed-time tolerance
+  // previously straddled two ticks at 11/22/33s, producing duplicate event
+  // IDs, broken React keys and ghost rows under the "latest three" heading.
+  const currentTick = Math.round(elapsed / DT);
+  for (const wave of getRound(roundId).waves) if (currentTick === Math.max(1, Math.ceil(wave.at / DT - 1e-8))) {
+    events.push({ id: `${roundId}-${wave.at}-landing`, passengerId: 0, phase: "ops", title: wave.surprise, detail: `${wave.label}: ${wave.count} pasajeros. El acceso que abriste decidirá por dónde caminan.`, tone: "good", time: elapsed });
+  }
+  // Floating point accumulation can make the 11.0s tick evaluate as
+  // 10.9999999999 and delay a published landing by a full 0.1s frame.
+  // Keep the historical classic v5 timing and scores byte-for-byte intact.
+  const arrivalEpsilon = roundId === DEFAULT_ROUND ? 0 : 1e-9;
+  while (spawned < TARGET && elapsed + arrivalEpsilon >= nextSpawn) { agents.push(makeAgent(spawned, liveEdges)); spawned++; nextSpawn = arrivalAt(roundId, spawned) ?? Infinity; }
   let retries = state.retries, cleared = state.cleared, failed = state.failed, turnedAway = state.turnedAway, abandoned = state.abandoned;
   let queueSwitches = state.queueSwitches, queueStays = state.queueStays;
   let nextQueueSequence = state.nextQueueSequence;
@@ -457,13 +469,14 @@ function safeWrite(key: string, value: string) {
 
 export default function Home() {
   const [edges, setEdges] = useState<[Edge[], Edge[]]>([[...GUIDED[0]], [...GUIDED[1]]]);
+  const [roundId, setRoundId] = useState(DEFAULT_ROUND);
   const [storageReady, setStorageReady] = useState(false);
   const [sim, setSim] = useState<Sim>(blank);
   const [selected, setSelected] = useState<{ grid: Grid; node: string } | null>(null);
   const [message, setMessage] = useState("Las cintas impiden el paso; los pasajeros caminan por las celdas libres del corredor.");
   const [pace, setPace] = useState<0.5 | 1 | 2>(1);
   const [bestScore, setBestScore] = useState(0);
-  const [previousRun, setPreviousRun] = useState<{ score: number; fingerprint: string } | null>(null);
+  const [previousRun, setPreviousRun] = useState<{ score: number; fingerprint: string; roundId: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [shareFallback, setShareFallback] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] = useState<{ score: number; fingerprint: string } | null>(null);
@@ -473,6 +486,8 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       const query = new URLSearchParams(window.location.search);
       const challenge = decodeLayout(query.get("layout") ?? "", POST_COLS, POST_ROWS);
+      const challengeRound = parseChallengeRound(query.get("round"), query.get("rules"));
+      if (challengeRound !== null) setRoundId(challengeRound);
       let restored: [Edge[], Edge[]] | null = challenge as [Edge[], Edge[]] | null;
       if (!restored) {
         try { restored = sanitizeLayoutGroups(JSON.parse(safeRead("gateflow-layout-v2") ?? "null"), POST_COLS, POST_ROWS) as [Edge[], Edge[]] | null; } catch { restored = null; }
@@ -481,11 +496,15 @@ export default function Home() {
         setEdges(restored);
         if (challenge) {
           const targetScore = parseChallengeScore(query.get("beat"));
-          if (targetScore !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
-          setMessage("Reto recibido: modifica las cintas para superar la puntuación original.");
+          if (targetScore !== null && challengeRound !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
+          setMessage(challengeRound === null
+            ? "El reto usa una versión de reglas desconocida. Se cargó el diseño sin una puntuación comparable."
+            : targetScore === 1000
+              ? "Reto perfecto recibido: ajusta las cintas para igualar los 1000 puntos máximos con las mismas llegadas."
+              : "Reto recibido: modifica las cintas para superar la puntuación original con las mismas llegadas.");
         }
       }
-      const savedBest = Number(safeRead("gateflow-best-v2") ?? 0);
+      const savedBest = Number(safeRead(challengeRound && challengeRound !== DEFAULT_ROUND ? `gateflow-best-${challengeRound}-waves-1` : "gateflow-best-v2") ?? 0);
       if (Number.isFinite(savedBest)) setBestScore(Math.max(0, Math.min(1000, savedBest)));
       setStorageReady(true);
     }, 0);
@@ -497,9 +516,9 @@ export default function Home() {
   }, [edges, storageReady]);
   useEffect(() => {
     if (!sim.running) return;
-    const timer = window.setInterval(() => setSim((state) => tick(state, edgeRef.current)), simulationInterval(pace, DT));
+    const timer = window.setInterval(() => setSim((state) => tick(state, edgeRef.current, roundId)), simulationInterval(pace, DT));
     return () => clearInterval(timer);
-  }, [sim.running, pace]);
+  }, [sim.running, pace, roundId]);
 
   const terminalStages: Stage[] = ["done", "failed", "turnedAway", "left"];
   const active = sim.agents.filter((agent) => !terminalStages.includes(agent.stage)).length;
@@ -509,21 +528,28 @@ export default function Home() {
   const layoutLocked = sim.elapsed > 0 && !finished;
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
-  const scoreLedger = scoreShiftBreakdown({ processed: sim.cleared, elapsed: sim.elapsed, retries: sim.retries, target: TARGET, turnedAway: sim.turnedAway, abandoned: sim.abandoned, complete: finished, smartSwitches: sim.queueSwitches, repairs: sim.repairs, faultsLeft: unresolvedFaults.length });
+  const paceElapsed = scoredElapsed(roundId, sim.elapsed);
+  const landingOffset = (arrivalAt(roundId, TARGET - 1) ?? 0) - (arrivalAt(DEFAULT_ROUND, TARGET - 1) ?? 0);
+  const landingOffsetLabel = Math.abs(landingOffset).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const scoreLedger = scoreShiftBreakdown({ processed: sim.cleared, elapsed: paceElapsed, retries: sim.retries, target: TARGET, turnedAway: sim.turnedAway, abandoned: sim.abandoned, complete: finished, smartSwitches: sim.queueSwitches, repairs: sim.repairs, faultsLeft: unresolvedFaults.length });
   const score = scoreLedger.total;
   const rank = rankShift(score);
-  const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: sim.elapsed, target: TARGET });
+  const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: paceElapsed, target: TARGET, paceIsNet: roundId !== DEFAULT_ROUND });
   const fingerprint = layoutFingerprint(edges);
-  const roundDelta = finished && previousRun ? describeRoundDelta(previousRun.score, score, previousRun.fingerprint === fingerprint) : null;
+  const roundDelta = finished && previousRun?.roundId === roundId ? describeRoundDelta(previousRun.score, score, previousRun.fingerprint === fingerprint) : null;
   const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
   const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
-  const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: sim.elapsed, queueSwitches: sim.queueSwitches, score }) : null;
+  const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: paceElapsed, queueSwitches: sim.queueSwitches, score }) : null;
   const flowMood = finished ? (score >= 850 ? "glow" : "settled") : queued <= 2 ? "calm" : queued <= 6 ? "steady" : "pressure";
   const flowLabel = finished ? (score >= 850 ? "FLUJO DOMINADO" : "TURNO FINALIZADO") : flowMood === "calm" ? "FLUJO TRANQUILO" : flowMood === "steady" ? "FLUJO ESTABLE" : "AUMENTA LA PRESIÓN";
   const isNewBest = finished && score > bestScore;
   const displayedBest = Math.max(bestScore, finished ? score : 0);
   const statusRank = finished ? `${rank.grade} · ${rank.title}` : sim.elapsed ? `PROVISIONAL · ${rank.grade}` : "LISTO · SIN CLASIFICAR";
   const flowPoints = scoreLedger.queueSwitchBonus + scoreLedger.repairBonus;
+  const round = getRound(roundId);
+  const nextWave = sim.spawned === 0 && sim.elapsed === 0 ? round.waves[0] ?? null : upcomingWave(roundId, sim.elapsed);
+  const lastWave = sim.elapsed > 0 ? [...round.waves].reverse().find((wave) => wave.at <= sim.elapsed) : null;
+  const nextWaveSeconds = nextWave ? Math.max(0, Math.ceil(nextWave.at - sim.elapsed)) : null;
   const ledgerItems = [
     ["Personas atendidas", scoreLedger.throughput],
     ["Tiempo de resolución", scoreLedger.pace],
@@ -537,7 +563,7 @@ export default function Home() {
     ["Abandonos", scoreLedger.abandonmentPenalty],
   ] as const;
   const visibleRotations = WORKER_CHANGES.filter((worker) => workerTimes(worker).reopen >= sim.elapsed - 2.5).sort((a, b) => a.startAt - b.startAt).slice(0, 4);
-  useEffect(() => { if (isNewBest) safeWrite("gateflow-best-v2", String(score)); }, [isNewBest, score]);
+  useEffect(() => { if (isNewBest) safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }, [isNewBest, score, roundId]);
 
   function selectNode(grid: Grid, node: string) {
     if (layoutLocked) {
@@ -574,11 +600,11 @@ export default function Home() {
     }
   }
   function commitBest() {
-    if (finished && score > bestScore) { setBestScore(score); safeWrite("gateflow-best-v2", String(score)); }
+    if (finished && score > bestScore) { setBestScore(score); safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }
   }
   function captureFinishedRun() {
     commitBest();
-    if (finished) setPreviousRun({ score, fingerprint });
+    if (finished) setPreviousRun({ score, fingerprint, roundId });
   }
   function run() {
     setSelected(null); setCopied(false); setShareFallback(null);
@@ -597,8 +623,16 @@ export default function Home() {
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
   }
+  function selectRound(nextId: string) {
+    if (layoutLocked || nextId === roundId) return;
+    commitBest(); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
+    const savedBest = Number(safeRead(nextId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${nextId}-waves-1`) ?? 0);
+    setBestScore(Number.isFinite(savedBest) ? Math.max(0, Math.min(1000, savedBest)) : 0);
+    setSelected(null); setCopied(false); setShareFallback(null);
+    setMessage(`Misión «${getRound(nextId).title}» lista. Mira el horario y prepara las cintas antes de empezar.`);
+  }
   async function copyScorecard() {
-    const url = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score);
+    const url = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score, roundId);
     const card = createShareCard({ score, rank, processed: sim.cleared, target: TARGET, elapsed: sim.elapsed, abandoned: sim.abandoned, retries: sim.retries, fingerprint, url });
     let didCopy = false;
     try { await navigator.clipboard.writeText(card); didCopy = true; } catch {
@@ -611,12 +645,14 @@ export default function Home() {
   }
 
   async function shareScorecard() {
-    const link = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score);
+    const link = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score, roundId);
     const payload = createNativeShareData({ score, processed: sim.cleared, target: TARGET, url: link });
     if (typeof navigator.share !== "function") { await copyScorecard(); return; }
     try {
       await navigator.share(payload);
-      setMessage("Compartiste un desafío que tus amigos pueden mejorar cambiando las cintas.");
+      setMessage(score === 1000
+        ? "Compartiste un reto perfecto: tus amigos pueden intentar igualar los 1000 puntos cambiando las cintas."
+        : "Compartiste un desafío que tus amigos pueden mejorar cambiando las cintas.");
     } catch (error) {
       // Cancel is an intentional user decision; never copy or contact anyone after cancellation.
       if (error instanceof Error && error.name === "AbortError") {
@@ -629,7 +665,7 @@ export default function Home() {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><span>GF</span><div><p>SIMULADOR AEROPORTUARIO / TURNO 04</p><h1>Gateflow</h1></div></div>
+      <div className="brand"><span>GF</span><div><p>SIMULADOR AEROPORTUARIO / {roundId === DEFAULT_ROUND ? "TURNO CLÁSICO" : round.title.toUpperCase()}</p><h1>Gateflow</h1></div></div>
       <div className="top-actions"><i className={sim.running ? "live" : ""}>{sim.running ? "● Turno en curso" : finished ? "● Turno terminado" : sim.elapsed ? "● Turno en pausa" : "● Modo edición"}</i><button onClick={reset}>Reiniciar turno</button></div>
     </header>
     <section className="hero">
@@ -637,7 +673,7 @@ export default function Home() {
       <p>Conecta postes con cintas retráctiles para organizar dos filas del aeropuerto. Los pasajeros usan A* para avanzar por los <strong>espacios libres</strong> y luego pasan por entrevistas migratorias, nuevas revisiones de equipaje y controles de seguridad. Su paciencia tiene un límite.</p>
     </section>
     <section className="metrics" aria-label="Indicadores del turno">
-      <article><span>Tiempo</span><strong>{timeLabel(sim.elapsed)}</strong><small>meta ≤ 00:55</small></article>
+      <article><span>Tiempo real</span><strong>{timeLabel(sim.elapsed)}</strong><small>{roundId === DEFAULT_ROUND ? "meta ≤ 00:55" : `puntuable ${timeLabel(paceElapsed)} · meta ≤ 00:55`}</small></article>
       <article><span>Atendidos</span><strong>{sim.cleared}<em>/{TARGET}</em></strong><small>{active} en el sistema</small></article>
       <article><span>En fila</span><strong>{queued}</strong><small>{sim.queueSwitches} cambios de fila</small></article>
       <article className="score"><span>Puntuación</span><strong>{sim.elapsed ? score : "—"}</strong><small>{displayedBest ? `récord ${displayedBest}` : "/ 1000 puntos"}</small></article>
@@ -647,11 +683,13 @@ export default function Home() {
         <div className="toolbar">
           <div><p className="label">PLANO EN VIVO · {fingerprint}</p><p aria-live="polite">{finished ? "Turno terminado. Revisa el resumen y ajusta una cinta o carga otro diseño." : message}</p></div>
           <div className="toolbar-controls">
+            <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={layoutLocked || sim.running} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
             <div className="pace" role="group" aria-label="Velocidad de simulación"><button aria-pressed={pace === 0.5} onClick={() => setPace(0.5)}>½ Lento</button><button aria-pressed={pace === 1} onClick={() => setPace(1)}>1× Normal</button><button aria-pressed={pace === 2} onClick={() => setPace(2)}>2× Rápido</button></div>
             <div className="presets" role="group" aria-label="Diseños predeterminados"><button disabled={layoutLocked} onClick={() => preset("guided")}>División guiada</button><button disabled={layoutLocked} onClick={() => preset("serpentine")}>Serpentina</button><button disabled={layoutLocked} onClick={() => preset("clear")}>Espacio libre</button></div>
           </div>
         </div>
-        <div className="scenario-banner"><span>CADENA DE RELEVOS</span><b>{POST_COLS * POST_ROWS} postes por zona · {CELL_COLS * CELL_ROWS} celdas transitables</b><small>Los módulos cierran para el relevo y la preparación; reabren con otra velocidad. Los pasajeros buscan filas cercanas más cortas.</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
+        <div className="scenario-banner"><span>{round.badge}</span><b>{round.title} · {POST_COLS * POST_ROWS} postes por zona</b><small>{round.story} {round.decision}</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
+        {round.waves.length > 0 && <div className="flight-board" role="status" aria-live="off"><strong>✈ TABLERO DE LLEGADAS</strong><span>{nextWave ? `${nextWave.label} · ${nextWave.count} viajeros en ${nextWaveSeconds} s` : `Todos los vuelos aterrizaron · ${sim.spawned}/${TARGET} viajeros en sala`}</span><small>{lastWave ? lastWave.surprise : round.payoff}</small><div className="flight-timeline" aria-label="Horarios de vuelos">{round.waves.map((wave) => <span key={wave.at} className={sim.elapsed >= wave.at ? "landed" : "upcoming"}>{timeLabel(wave.at)} · {wave.count}</span>)}</div></div>}
         {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
@@ -660,10 +698,11 @@ export default function Home() {
           <span className={`flow-indicator ${flowMood}`} aria-live="polite"><i />{flowLabel}</span>
           {finished && <section className="debrief" aria-label="Resumen del turno">
             <div className="grade">{rank.grade}</div>
-            <div className="debrief-copy"><p className="label">RESUMEN DEL TURNO · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD PERSONAL</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
+            <div className="debrief-copy"><p className="label">RESUMEN DE {round.title.toUpperCase()} · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD DE ESTA MISIÓN</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
-            {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {nextExperiment}</p>}
+            {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}; para comparar con el clásico, puntuamos {timeLabel(paceElapsed)}. {landingOffset > 0 ? `Restamos ${landingOffsetLabel} s porque el último avión aterrizó más tarde que en el clásico.` : landingOffset < 0 ? `Sumamos ${landingOffsetLabel} s porque el último avión aterrizó antes que en el clásico.` : "Los últimos vuelos aterrizaron a la misma hora."} Así el último horario no añade ni quita ventaja artificial en el reloj.</p>}
+            {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {round.waves.length ? `${round.payoff} ${nextExperiment}` : nextExperiment}</p>}
             <div className="debrief-actions"><button onClick={shareScorecard}>Compartir reto</button><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}
           </section>}
@@ -680,7 +719,7 @@ export default function Home() {
           <div className="progress"><span style={{ width: `${resolved / TARGET * 100}%` }} /></div>
           <div className="outcomes"><span><b>{sim.cleared}</b> atendidos</span><span><b>{sim.turnedAway}</b> rechazados</span><span><b>{sim.abandoned}</b> se retiraron</span><span><b>{sim.failed}</b> varados</span></div>
           <div className="ops-counters"><span><b>{sim.queueSwitches}</b> cambios de fila</span><span><b>{sim.repairs}</b> cintas reparadas</span></div>
-          <div className="micro-goals"><span className={sim.cleared >= 24 ? "met" : ""}>24 atendidos</span><span className={finished && sim.abandoned === 0 ? "met" : ""}>sin abandonos</span><span className={finished && sim.retries === 0 ? "met" : ""}>sin reintentos</span><span className={finished && sim.elapsed <= 55 ? "met" : ""}>≤ 00:55</span></div>
+          <div className="micro-goals"><span className={sim.cleared >= 24 ? "met" : ""}>24 atendidos</span><span className={finished && sim.abandoned === 0 ? "met" : ""}>sin abandonos</span><span className={finished && sim.retries === 0 ? "met" : ""}>sin reintentos</span><span className={finished && paceElapsed <= 55 ? "met" : ""}>≤ 00:55 netos</span></div>
         </section>
         <section className="incident-feed" aria-live="polite">
           <header><p className="label">REGISTRO EN VIVO</p><span>{sim.events.length ? "ÚLTIMOS 3" : "EN ESPERA"}</span></header>
