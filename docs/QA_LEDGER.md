@@ -99,5 +99,14 @@ Source baseline: `a0b71646b9cec9a05da1329bc954afd976b40db6`. This section supers
 
 See [GROWTH_AND_PLAYTEST.md](./GROWTH_AND_PLAYTEST.md) for research, the acceptance matrix, and non-coercive sharing design.
 
+## Later-round research and screening (31 Oct 2026, Peru)
+
+| ID | State | Verified evidence | Explicit remaining gate |
+| --- | --- | --- | --- |
+| RND-SPEC | DESIGNED | [ROUND_EXPANSION_SPEC.md](./ROUND_EXPANSION_SPEC.md) details 24 complication candidates, 36 proposed rounds, deterministic schemas and user A/B hypotheses | No new mechanics integrated; owner review needed |
+| RND-PROXY | PASS, **surrogate only** | 12 one-factor comparisons + 8 two-factor interactions, 128 paired seeds, conservation and deterministic replay under `lib/round-experiments.js`; comparison command prints signed deltas | Extract authoritative `tick` and validate full maps, movement, score, UI and actual enjoyment separately |
+| RND-AB-PLAYERS | NOT STARTED | Pilot and A/B-PLAYER-1..4 pre-registered as proposals; no consented subjects, assignments, or real engagement logs | Conduct UAT first; do not call any proxy result an A/B win |
+| RND-RELEASE | NOT STARTED | No new round-specific UI, game configuration, deployment or live browser verification | Build a single vertical slice, CI, exact Pages SHA, responsive/accessibility review, owner playtest |
+
 ### Critical design correction (PR #1)
 A fixed seed with unchanged belts has a fixed score. Requiring the exact shared layout for a win would make a score-to-beat challenge unwinnable. The receiver must be able to modify the **starting** layout and still compete against the original score. Falsifiable test: identical layout ties; modified layout can win, tie or lose, and selecting an unrelated preset exits the challenge. This correction is source-implemented and awaiting final PR CI and deployed browser evidence.

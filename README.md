@@ -19,6 +19,8 @@ The migration baseline was the Gateflow v5 Sites source at commit `8dbe2148b47d0
 | `npm run lint` | Lint the repository |
 | `npm run typecheck:pages` | Type-check Pages gameplay and adapter without emitting files; Worker typings are intentionally outside this gate |
 | `npm run test:simulation` | Test deterministic game logic |
+| `npm run test:rounds` | Check 12 prospective later-round A/B parameter pairs and 8 two-factor stress interactions using a simplified, deterministic queue model (not the live game) |
+| `npm run compare:rounds` | Print 128-seed paired difficulty-screening results; not a human A/B experiment |
 | `npm test` | Test simulation, build the Cloudflare Worker, check its artifact and rendered page metadata |
 | `npm run build:pages` | Compile independent static assets into `dist/pages/` with project base `/gategame/` |
 | `npm run test:pages` | Build Pages and validate links, fonts, source revision, metadata, and assets |
@@ -45,4 +47,4 @@ The expected public test URL is `https://pillb.github.io/gategame/`. Check `http
 
 The source is browser-executed and local-state gameplay; browser storage can persist game saves. Test from a fresh incognito profile as well as an existing save, and do not rely on an old browser tab to verify a new release.
 
-The [gameplay specification](docs/GAME_SPEC.md) defines the authoritative phases, mechanics, implementation priorities, and acceptance criteria. The [QA ledger](docs/QA_LEDGER.md) distinguishes local tests, public Pages verification and human acceptance; unchecked gates are not done. Resolve conflicts between prose claims and the actual simulation in favor of reproducible test evidence, then update both the specification and implementation under review.
+The [gameplay specification](docs/GAME_SPEC.md) defines the authoritative phases, mechanics, implementation priorities, and acceptance criteria. The [later-round expansion plan](docs/ROUND_EXPANSION_SPEC.md) proposes 36 new rounds, 24 complication types, and falsifiable A/B experiments; **none of these proposed rounds is live**. The [QA ledger](docs/QA_LEDGER.md) distinguishes local tests, public Pages verification and human acceptance; unchecked gates are not done. Resolve conflicts between prose claims and the actual simulation in favor of reproducible test evidence, then update both the specification and implementation under review.
