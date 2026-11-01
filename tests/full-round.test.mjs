@@ -29,6 +29,18 @@ const scenarios = [
 ];
 const terminal = new Set(["done", "failed", "turnedAway", "left"]);
 
+const BASELINES = Object.freeze({
+  guided: { elapsed: 42.9, cleared: 25, turnedAway: 3, switches: 11, repairs: 0, faults: 2, score: 868 },
+  serpentine: { elapsed: 65.9, cleared: 25, turnedAway: 3, switches: 35, repairs: 0, faults: 2, score: 796 },
+  "open-floor": { elapsed: 47.8, cleared: 25, turnedAway: 3, switches: 13, repairs: 0, faults: 0, score: 933 },
+});
+const REPAIRED_BASELINES = Object.freeze({
+  guided: { score: 1000, repairs: 2, elapsed: 42.9 },
+  serpentine: { score: 946, repairs: 2, elapsed: 65.9 },
+  "open-floor": { score: 933, repairs: 0, elapsed: 47.8 },
+});
+
+
 function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
   let state = { ...blank(), running: true };
   let walkingSeen = 0;
@@ -103,6 +115,12 @@ for (const [name, layout] of scenarios) {
     assert.equal(first.score, repeat.score);
     assert.ok(first.walkingSeen > 0, "No passenger used a walk stage: path untested");
     assert.equal(first.switchesInferred, first.state.queueSwitches);
+    assert.deepEqual({
+      elapsed: +first.state.elapsed.toFixed(1), cleared: first.state.cleared,
+      turnedAway: first.state.turnedAway, switches: first.state.queueSwitches,
+      repairs: first.state.repairs, faults: first.state.faults.length,
+      score: first.score,
+    }, BASELINES[name], "A game balance change must explicitly update the verified baseline");
     console.info("GATEFLOW_BASELINE "+JSON.stringify({preset:name,
       elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,turnedAway:first.state.turnedAway,
       failed:first.state.failed,abandoned:first.state.abandoned,switches:first.state.queueSwitches,
@@ -123,6 +141,10 @@ test("faults flagged on detection never break conservation or deterministic comp
     assert.equal(repaired.state.spawned, TARGET, name);
     assert.ok(repaired.score>=0 && repaired.score<=1000);
     assert.ok(repaired.state.repairs <= repaired.state.faults.length);
+    assert.deepEqual({
+      score: repaired.score, repairs: repaired.state.repairs,
+      elapsed: +repaired.state.elapsed.toFixed(1),
+    }, REPAIRED_BASELINES[name], "Repair outcome changed without updating the audited baseline");
     console.info("GATEFLOW_REPAIR "+JSON.stringify({preset:name,
       noIntervention:{score:baseline.score,elapsed:+baseline.state.elapsed.toFixed(1)},
       intervention:{score:repaired.score,elapsed:+repaired.state.elapsed.toFixed(1),repairs:repaired.state.repairs,
