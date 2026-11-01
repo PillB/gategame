@@ -10,7 +10,7 @@ This ledger distinguishes **source tests**, **local interactive observations**, 
 | Transfer destination | Public testing repository `PillB/gategame` |
 | Public fork manifest | Site `project_id: null`; no production Site deployment rights |
 | GitHub source commit | Pending first public commit |
-| GitHub Actions CI/deploy | Pending remote run and Pages configuration |
+| GitHub Actions CI/deploy | First CI run `41259084918` failed with exit 126 (Git file modes), fix pending rerun; Pages not dispatched |
 | Deployed `version.json` and browser SHA | Pending live verification |
 | User acceptance, post-testing privacy decision | Pending; do not change permissions or disable Site without user |
 
@@ -48,6 +48,7 @@ This ledger distinguishes **source tests**, **local interactive observations**, 
 6. **English user-facing content:** translated UI, canvas, events, worker hints, rank/medals and share cards, with es-PE document language and Spanish metadata. This is a source-language claim pending full live copy enumeration.
 7. **Pages/Worker deployment mismatch:** original Vinext build emits a Worker, not a static Pages site. Added dedicated Vite static entry and release trace marker. Removed development-preview metadata from production.
 8. **Border connection feedback misstatement:** a belt along an outer post row or column does not block a crossing between *interior* cells. Confirmation now distinguishes border belts from interior blockers.
+9. **CI permission regression introduced by transfer:** the first public tree was created with Git mode `100644` for every file. The original source has `100755` on four `scripts/*.sh`; CI exited 126 because `scripts/build-verified.sh` tried to execute `scripts/sites-env.sh`. Restore those file modes in the next tree/commit and check them before installing dependencies.
 
 ## Remaining risk register (must not silently call DONE)
 
