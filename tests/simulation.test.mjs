@@ -20,6 +20,8 @@ import {
   findWorkerCrossing,
   passengerPatience,
   queueSwitchProbability,
+  queueWalkDuration,
+  queueWalkLane,
   rankShift,
   repairBeltFault,
   sanitizeLayoutGroups,
@@ -443,4 +445,26 @@ test("the seeded rotation includes early, rare open and rotated belt faults", ()
   assert.ok(faults.some((worker) => worker.faultKind === "open"));
   assert.ok(faults.some((worker) => worker.faultKind === "rotate-down"));
   assert.ok(Math.min(...faults.map((worker) => worker.startAt)) < 25);
+});
+
+test("queue travel is bounded, finite and interpolated rather than teleporting", () => {
+  assert.equal(queueWalkDuration(3, 3), 0);
+  assert.equal(queueWalkDuration(3, 4), 0.65);
+  assert.equal(queueWalkDuration(0, 6), 3.9000000000000004);
+  for (const [start, end] of [[0, 6], [6, 0], [3, 4], [4, 2]]) {
+    const duration = queueWalkDuration(start, end);
+    let last = start;
+    for (let tick = 0; tick <= Math.ceil(duration / 0.1) + 2; tick += 1) {
+      const at = queueWalkLane(start, end, tick * 0.1, duration);
+      assert.ok(at >= Math.min(start, end) && at <= Math.max(start, end), "lane coordinate overshot");
+      assert.ok(Math.abs(at - last) <= 0.1 / 0.65 + 1e-9, "a passenger teleported across lanes in a tick");
+      if (start < end) assert.ok(at >= last); else assert.ok(at <= last);
+      last = at;
+    }
+    assert.equal(queueWalkLane(start, end, duration, duration), end);
+    assert.equal(queueWalkLane(start, end, duration + 100, duration), end);
+  }
+  assert.throws(() => queueWalkDuration(-1, 2), /válidas/i);
+  assert.throws(() => queueWalkLane(1, 2, NaN, 1), /válida/i);
+  assert.throws(() => queueWalkLane(1, 2, 0, -1), /válida/i);
 });

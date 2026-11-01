@@ -12,7 +12,7 @@
     "build:pages": "vite build --config vite.pages.config.ts",
     "preview:pages": "vite preview --config vite.pages.config.ts",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "node --test tests/simulation.test.mjs tests/challenges.test.mjs tests/round-experiments.test.mjs && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "node --test tests/simulation.test.mjs tests/challenges.test.mjs tests/full-round.test.mjs tests/round-experiments.test.mjs && npm run build && node --test tests/rendered-html.test.mjs",
     "test:simulation": "node --test tests/simulation.test.mjs",
     "test:rounds": "node --test tests/round-experiments.test.mjs",
     "compare:rounds": "node scripts/compare-rounds.mjs 128",

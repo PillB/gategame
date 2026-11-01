@@ -17,7 +17,7 @@ The game should support the loop **understand → design → predict → simulat
 | Pause | Pause | Resume, speed, inspect faults, reset | Run |
 | Debrief | All 28 outcomes terminal | Inspect exact score ledger, copy challenge, tune/reset/preset | Build |
 
-Passenger transition: `grid1 → choice1 → queue1 → service1 → grid2 → choice2 → queue2 → service2 → done`, with terminal branches `turnedAway`, `left`, `failed`. Immigration failures cannot enter security. All agents must reach exactly one terminal state; no duplication or disappearance.
+Passenger transition: `grid1 → choice1 → walk1 (when changing lanes) → queue1 → service1 → grid2 → choice2 → walk2 (when changing lanes) → queue2 → service2 → done`, with terminal branches `turnedAway`, `left`, `failed`. Immigration failures cannot enter security. All agents must reach exactly one terminal state; no duplication or disappearance.
 
 ## Mathematical specification
 
@@ -98,3 +98,12 @@ Infinite layout permutations are not enumerable (up to 360 posts with cardinal c
 5. Run deterministic source tests, static artifact and source audit, lint/typecheck/build; inspect diffs and secrets.
 6. Publish to public `PillB/gategame` only after local checks; configure Pages/inspect Actions and verify the deployed SHA and all controls in an interactive browser with screenshots.
 7. Present evidence plus an honest open-issue ledger and invite the user/team to perform UAT. Only after explicit successful UAT discuss changing repository privacy; never silently change the existing Site's audience.
+
+
+### Inter-lane walking after queue choice (candidate in PR #6)
+
+A passenger who changes desk cannot jump directly into the destination queue. The candidate uses deterministic `walk1/walk2` states with `duration = max(0.5, 0.65 * abs(destinationLane - originLane))` simulation seconds, a continuous interpolated sprite lane coordinate, and reservations counted in the destination queue's load while walking. A passenger is assigned a FIFO sequence only at queue arrival. A walking agent is never service-eligible before arriving. Staying at an original lane still joins the queue without travel. The walking interpolation is clamped to both endpoint lanes.
+
+This changes the game balance and therefore requires full-round acceptance, not merely unit tests. No path may teleport across lanes, an unchanged seeded layout must reproduce exactly, and every passenger must resolve into one terminal state.
+
+Verified Node/CI **draft-engine** baselines (run [41267680383](https://github.com/PillB/gategame/actions/runs/41267680383)): Guided 42.9 s, 25/28, 11 changes, 2 unresolved faults, 868 points; Serpentine 65.9 s, 25/28, 35 changes, 2 faults, 796 points; Open Floor 47.8 s, 25/28, 13 changes, 0 faults, 933 points. Early flagged faults: Guided two repairs => 1000 capped; Serpentine two repairs => 946; Open Floor none. These are fixture assertions in `tests/full-round.test.mjs`, **not published Pages/Chrome verdicts**.
