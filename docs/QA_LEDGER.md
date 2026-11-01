@@ -101,3 +101,16 @@ See [GROWTH_AND_PLAYTEST.md](./GROWTH_AND_PLAYTEST.md) for research, the accepta
 
 ### Critical design correction (PR #1)
 A fixed seed with unchanged belts has a fixed score. Requiring the exact shared layout for a win would make a score-to-beat challenge unwinnable. The receiver must be able to modify the **starting** layout and still compete against the original score. Falsifiable test: identical layout ties; modified layout can win, tie or lose, and selecting an unrelated preset exits the challenge. This correction is source-implemented and awaiting final PR CI and deployed browser evidence.
+
+
+## Queue-walk candidate evidence — CI source tests, not deployed
+
+| Gate | Result | Reproduction / remaining work |
+| --- | --- | --- |
+| Real-engine full-round conservation | **PASS** [run 41267594103](https://github.com/PillB/gategame/actions/runs/41267594103) | Three presets, repeated seeded runs, every 0.1-s tick conservation and occupied-counter uniqueness; paused simulation/renderer unaffected |
+| Exact numeric baseline + repairs | **PASS** [run 41267680383](https://github.com/PillB/gategame/actions/runs/41267680383) | Logged 868/796/933 defaults and 1000/946/933 with instant fault marking; verify fixed snapshots on latest CI |
+| Queue travel never teleports | **PASS in engine invariant** | `queueWalkLane` clamps and moves at ≤0.1/0.65 lanes/tick, stage `walk1/walk2` completes before service, arrival FIFO, destination load reserved |
+| Browser sprite interpolation, responsive controls | **BLOCKED/NOT TESTED** | Chrome local navigation administrator-blocked; pending GitHub-hosted browser screenshots on compiled PR |
+| Published source SHA and owner playtest | **BLOCKED/NOT TESTED** | Candidate deliberately unmerged; last public main remained stable until separate CI-reviewed updates |
+
+**Release policy:** do not merge until latest draft CI is green, browser evidence for actual movement exists, all score changes are documented, and there are no regression findings. The original private Site remains unchanged.
