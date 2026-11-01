@@ -70,6 +70,10 @@ async function fullRound(preset,name){
   const data=await evaluate("(()=>({score:Number(document.querySelector('.debrief-copy strong')?.textContent),cleared:document.querySelector('.debrief-copy')?.textContent,layout:document.querySelector('.toolbar .label')?.textContent}))()");
   assert.ok(Number.isInteger(data.score)&&data.score>=0&&data.score<=1000,JSON.stringify(data));
   assert.match(data.cleared,/25\/28/,"Passenger count unexpected");
+  const delta=await evaluate("document.querySelector('.round-delta')?.textContent||''");
+  if(preset==="División guiada")assert.equal(delta,"","First result has no previous-round comparison");
+  if(preset==="Serpentina")assert.match(delta,/72 puntos menos/,"Second round must compare to Guided 868");
+  if(preset==="Espacio libre")assert.match(delta,/Mejoraste 137 puntos/,"Third round must compare to Serpentine 796");
   await screenshot(name+"-debrief");
   console.info("BROWSER_ROUND "+JSON.stringify({preset,score:data.score,detail:data.cleared,layout:data.layout}));
 }
@@ -150,6 +154,8 @@ try{
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");
   assert.ok(width.document<=width.viewport+3,"Mobile viewport overflow "+JSON.stringify(width));
+  const shortTargets=await evaluate("([...document.querySelectorAll('.debrief-actions button,.top-actions button,.toolbar-controls button,.run,.score-ledger summary')].filter(x=>getComputedStyle(x).display!=='none'&&x.getBoundingClientRect().height<43.5).map(x=>({text:x.textContent,height:x.getBoundingClientRect().height})))");
+  assert.deepEqual(shortTargets,[],"Small touch targets in mobile view "+JSON.stringify(shortTargets));
   await screenshot("06-mobile-debrief");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947')");
