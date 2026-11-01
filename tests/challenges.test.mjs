@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment } from "../lib/challenges.js";
+import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment, createNativeShareData } from "../lib/challenges.js";
 
 test("challenge score parser is strict, bounded and never interprets HTML or decimals", () => {
   assert.equal(parseChallengeScore("0"), 0);
@@ -50,4 +50,18 @@ test("deterministic same-layout replay is a tie, but improving the starting layo
   assert.match(challengePrompt(947, true), /Diseño ajustado.*947/i);
   assert.match(challengePrompt(947, true, 948), /Superaste el reto por 1 punto/i);
   assert.match(challengePrompt(947, true, 946), /faltaron 1 punto/i);
+});
+
+test("native sharing payload matches the challenge and never duplicates or leaks the URL in body", () => {
+  const link = createChallengeUrl("https://pillb.github.io/gategame/?utm_source=social#secret", "G1.7.AA", 947);
+  const payload = createNativeShareData({ score: 947, processed: 25, target: 28, url: link });
+  assert.equal(payload.url, link);
+  assert.equal(payload.title, "Gateflow · Reto entre amigos");
+  assert.match(payload.text, /947 puntos/);
+  assert.match(payload.text, /25 de 28/);
+  assert.doesNotMatch(payload.text, /https?:|utm_|secret|correo|teléfono/i);
+  assert.deepEqual(Object.keys(payload).sort(), ["text", "title", "url"]);
+  assert.throws(() => createNativeShareData({ score: 948, processed: 25, target: 28, url: link }), /corresponde/i);
+  assert.throws(() => createNativeShareData({ score: 947, processed: 29, target: 28, url: link }), /válida/i);
+  assert.throws(() => createNativeShareData({ score: 947, processed: 25, target: 28, url: "javascript:alert(1)" }), /corresponde/i);
 });
