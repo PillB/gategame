@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChallengeScore, createChallengeUrl, compareChallengeScore, nextRoundExperiment } from "../lib/challenges.js";
+import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment } from "../lib/challenges.js";
 
 test("challenge score parser is strict, bounded and never interprets HTML or decimals", () => {
   assert.equal(parseChallengeScore("0"), 0);
@@ -40,4 +40,14 @@ test("coaching uses observable variables, prioritizes repairs, and does not prom
   assert.match(nextRoundExperiment({ queueSwitches: 35 }), /bono máximo/i);
   assert.match(nextRoundExperiment({ score: 900 }), /una sola cinta/i);
   assert.doesNotMatch(nextRoundExperiment({ score: 900 }), /garantiz|siempre|obtendrás/i);
+});
+
+test("deterministic same-layout replay is a tie, but improving the starting layout can win", () => {
+  // Fixed seed + unchanged topology is deterministic: an exact replay cannot improve the score.
+  assert.equal(challengePrompt(947, false, 947), "¡Empate! Igualaste la puntuación del desafío.");
+  assert.match(challengePrompt(947, false), /cambia una cinta/i);
+  // Changed layout MUST NOT disable the score target: optimization is the playable challenge.
+  assert.match(challengePrompt(947, true), /Diseño ajustado.*947/i);
+  assert.match(challengePrompt(947, true, 948), /Superaste el reto por 1 punto/i);
+  assert.match(challengePrompt(947, true, 946), /faltaron 1 punto/i);
 });
