@@ -32,7 +32,7 @@ The GitHub Pages adapter consists of `index.html`, `src/main.tsx`, `src/fonts.cs
 
 ## Live deployment and privacy
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for an operator checklist. `.github/workflows/ci.yml` runs on pull requests and pushes to `main` but **does not deploy**. `.github/workflows/pages.yml` deploys the GitHub Pages test site **only on a manually initiated `workflow_dispatch` from `main`** after all quality gates pass; GitHub Pages must first be configured with **Source: GitHub Actions** in repository settings.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for an operator checklist. `.github/workflows/ci.yml` runs quality gates on pull requests and `main` pushes and **does not deploy**. `.github/workflows/static.yml` is the **canonical automatic Pages publisher** on `main` pushes: it installs from the lockfile, lints, checks TypeScript, runs the simulation and Worker artifact tests, builds the static Pages bundle, executes headless Chrome through all three presets (including mobile and challenge flows), uploads screenshot evidence, and publishes **only `dist/pages`** if every gate passes. `.github/workflows/pages.yml` remains an optional manually dispatched recovery workflow on `main`; do not run it concurrently with the automatic publisher. GitHub Pages Source must be **GitHub Actions**.
 
 The expected public test URL is `https://pillb.github.io/gategame/`. Check `https://pillb.github.io/gategame/version.json` to compare the deployed 40-character source commit SHA against the GitHub Actions run. **Making the repository private later does not necessarily make its existing Pages site private**. Disable the Pages site (or migrate to an access-controlled host) once user acceptance testing is complete if the site must no longer be publicly accessible.
 
@@ -46,3 +46,8 @@ The expected public test URL is `https://pillb.github.io/gategame/`. Check `http
 The source is browser-executed and local-state gameplay; browser storage can persist game saves. Test from a fresh incognito profile as well as an existing save, and do not rely on an old browser tab to verify a new release.
 
 The [gameplay specification](docs/GAME_SPEC.md) defines the authoritative phases, mechanics, implementation priorities, and acceptance criteria. The [QA ledger](docs/QA_LEDGER.md) distinguishes local tests, public Pages verification and human acceptance; unchecked gates are not done. Resolve conflicts between prose claims and the actual simulation in favor of reproducible test evidence, then update both the specification and implementation under review.
+
+
+## Latest release and player acceptance
+
+The public site is **a testing deployment**, not the private ChatGPT Site. Its revision marker is `/gategame/version.json`; compare that 40-character `sourceRevision` with the successful GitHub Pages Actions run. A green deployment alone is not external HTTP/browser verification. The GitHub-hosted Chrome run tests the same compiled `dist/pages` artifact through three complete seeded games and retains screenshots, but final iOS Safari, touch/VoiceOver, real-share-sheet, external URL and human enjoyment checks remain open. See [latest release ledger](docs/RELEASE_LEDGER.md) and [open QA issues](https://github.com/PillB/gategame/issues).
