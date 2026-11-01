@@ -103,6 +103,11 @@ for (const [name, layout] of scenarios) {
     assert.equal(first.score, repeat.score);
     assert.ok(first.walkingSeen > 0, "No passenger used a walk stage: path untested");
     assert.equal(first.switchesInferred, first.state.queueSwitches);
+    console.info("GATEFLOW_BASELINE "+JSON.stringify({preset:name,
+      elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,turnedAway:first.state.turnedAway,
+      failed:first.state.failed,abandoned:first.state.abandoned,switches:first.state.queueSwitches,
+      faults:first.state.faults.length,repairs:first.state.repairs,score:first.score,
+      observedWalkingTicks:first.walkingSeen}));
     for (const pace of [0.5, 1, 2]) {
       assert.ok(simulationInterval(pace, DT) > 0);
       // Speed changes only wall-clock scheduling; completed tick semantics stay invariant.
@@ -118,6 +123,10 @@ test("faults flagged on detection never break conservation or deterministic comp
     assert.equal(repaired.state.spawned, TARGET, name);
     assert.ok(repaired.score>=0 && repaired.score<=1000);
     assert.ok(repaired.state.repairs <= repaired.state.faults.length);
+    console.info("GATEFLOW_REPAIR "+JSON.stringify({preset:name,
+      noIntervention:{score:baseline.score,elapsed:+baseline.state.elapsed.toFixed(1)},
+      intervention:{score:repaired.score,elapsed:+repaired.state.elapsed.toFixed(1),repairs:repaired.state.repairs,
+      faults:repaired.state.faults.length}}));
     if (repaired.state.repairs) assert.ok(repaired.score >= baseline.score ||
       repaired.state.cleared !== baseline.state.cleared ||
       repaired.state.elapsed !== baseline.state.elapsed,
