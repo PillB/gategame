@@ -32,9 +32,9 @@ test("GitHub Pages build has an entrypoint and base-safe bundled assets", async 
 
 test("automatic Pages workflow never publishes raw repository files", async () => {
   const workflow = await readFile(path.resolve(".github/workflows/static.yml"), "utf8");
-  assert.match(workflow, /path:\\s*dist\\/pages/, "Pages must upload the built game");
-  assert.doesNotMatch(workflow, /path:\\s*['"]?\\.['"]?(?:\\s|$)/m, "Uploading repository root publishes uncompiled TypeScript and unrelated files");
-  assert.match(workflow, /run:\\s*npm run test:pages/, "Pages must validate the built artifact before upload");
-  assert.match(workflow, /run:\\s*npm run typecheck:pages/, "Pages must type-check the game");
-  assert.match(workflow, /needs:\\s*verify-and-package/, "Deployment must require the verification job");
+  assert.match(workflow, /path:\s*dist\/pages/, "Pages must upload the built game");
+  assert.doesNotMatch(workflow, /path:\s*['"]?\.['"]?(?:\s|$)/m, "Uploading repository root publishes uncompiled TypeScript and unrelated files");
+  assert.match(workflow, /run:\s*npm run test:pages/, "Pages must validate the built artifact before upload");
+  assert.match(workflow, /run:\s*npm run typecheck:pages/, "Pages must type-check the game");
+  assert.match(workflow, /needs:\s*verify-and-package/, "Deployment must require the verification job");
 });
