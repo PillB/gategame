@@ -5,7 +5,7 @@
 | Target | Build command | Output | Authority |
 | --- | --- | --- | --- |
 | ChatGPT Sites / Vinext Worker | `npm run build` | `dist/server/index.js` and Worker files | Managed Sites lifecycle; **not** deployed by GitHub Actions |
-| Public GitHub Pages test | `npm run build:pages` | `dist/pages/` | Manually dispatched GitHub Actions workflow on `main` |
+| Public GitHub Pages test | `npm run build:pages` | `dist/pages/` | Automatic, CI+Chrome-gated `.github/workflows/static.yml` on `main`; optional manual fallback `.github/workflows/pages.yml` |
 
 The Pages build is a static HTML/CSS/JS client application. It does not provide authentication, API routes, server rendering, or database storage. Never move `.env*`, tokens, cookies, private test fixtures, or account-identifying data into `public/` or bundled client code. Before a public push, review tracked files and Git history for secrets and personal information; a deleted file remains in public Git history unless remediated.
 
@@ -23,15 +23,15 @@ The public fork deliberately uses `.openai/hosting.json` with `project_id: null`
 
 1. Confirm upstream Sites snapshot/source provenance and inspect `git diff` for the intended scope; no private credentials in public repository or reachable assets.
 2. Run `npm ci --no-audit --no-fund`, `npm run lint`, `npm run typecheck:pages`, `npm test`, and `npm run test:pages`. Record outputs and failures in the QA ledger. `npm test` independently validates the Sites Worker build; its Cloudflare ambient types are not part of the scoped Pages TypeScript check.
-3. Run local browser/E2E tests against `npm run preview:pages` at `http://localhost:4173/gategame/`; inspect the console and network for errors; exercise keyboard, pointer, mobile viewport, reload, and each game phase. Retain screenshots.
-4. Merge a reviewed PR to `main`; wait for green checks. From **Actions → Publish GitHub Pages test site → Run workflow**, select **main**, dispatch manually, and inspect both workflow jobs.
+3. Run `node scripts/browser-smoke.mjs` after `npm run test:pages` against the built game: it launches runner Chrome, serves `/gategame/`, exercises presets/speeds, pause/reset, full rounds, sharing and the 390px mobile debrief, and retains PNGs. The workflow uploads screenshot evidence even on failed tests. This CI run is **not** an independent external verification of the public URL. Manually check touch/pointer edits and screen readers as separately tracked.
+4. Merge a reviewed PR to `main`, then verify both **Gateflow quality gates** and **Deploy tested Gateflow to Pages** workflows run automatically on the new SHA. The publisher first lints, typechecks, runs mechanics and Worker tests, verifies the Pages artifact, and runs Chrome gameplay/browser screenshot checks; only after all pass may `dist/pages` be deployed. The manual **Publish GitHub Pages test site** workflow is a recovery fallback, not the normal release path.
 5. Open `https://pillb.github.io/gategame/` in a fresh browser profile, hard reload, check every user-facing Spanish string and control, and compare mechanics/visual evidence to the local test results.
 6. Open `/gategame/version.json`, compare `sourceRevision` to the Actions run commit, and verify the HTML `gateflow-source-revision` meta equals it. Also verify returned content type, CSS/JS/font requests, and no broken route, asset, or console error. A green build alone is not proof of interactive gameplay correctness.
 7. Invite human acceptance testing **after** the checks and screenshots are complete. Record pass/fail feedback and fix-and-retest the actual failing commit before calling the release ready.
 
 ## Rollback / privacy
 
-- Rollback by reverting the faulty commit in a new reviewed PR and manually running the Pages deploy workflow on the restored `main`. Verify the resulting SHA marker.
+- Rollback by reverting the faulty commit in a reviewed PR; merging the revert to `main` automatically rebuilds and republishes after all gates. Use the manual workflow only for a verified recovery need. Check deployed SHA and asset delivery after rollback.
 - If testing is complete and confidentiality is required, **disable/unpublish GitHub Pages** under Settings → Pages, and check the URL becomes inaccessible. Changing a GitHub repository to private by itself is not a reliable way to restrict a formerly public Pages deployment.
 - Do not automatically change the repository back to private without the explicit final human go-ahead; do not delete QA evidence or the release ledger.
 
