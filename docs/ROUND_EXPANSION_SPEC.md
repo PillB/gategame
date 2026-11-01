@@ -7,7 +7,7 @@
 - Identidad: **un rompecabezas operativo de aeropuertos**, no un juego de pulsar botones ni un gestor genérico. Conectar cintas **bloquea** cruces; abrir corredores cambia rutas. Dos procesos: migraciones y seguridad.
 - Reglas: A* en celdas cardinales, FIFO por entrada real a fila, búsqueda local de filas (la persona en `4,3,2,5,0` ve `2` pero no el `0` detrás del ascenso a `5`), inercia estocástica y reservas para evitar estampidas, paciencia individual, relevos de trabajadores en cascada, fallas de cintas y supervisor que repara dentro de 90° de visión.
 - Realización y economía: 28 personas en la primera versión, 7 puestos por etapa, velocidad simulada determinista, puntuación 0–1000 con desglose, reintentos, abandono y tiempo; desafíos compartidos conservan el mapa inicial y permiten *modificar* cintas para superar la puntuación. No cambiar ni invalidar el formato `G1` sin versionamiento.
-- Deudas antes de complejidad: el código `app/page.tsx` todavía concentra el `tick` y tiene parámetros de ronda fijos; la transición a otra fila salta visualmente al nuevo puesto. El editor móvil, fuentes en español, mapa/colisión, copia de desafíos, progreso y Pages deben superar gates de navegador por SHA. La documentación histórica no sustituye pruebas sobre el despliegue actual.
+- Deudas antes de complejidad: el código `app/page.tsx` todavía concentra el `tick` y tiene parámetros de ronda fijos. **La rama principal más reciente ya incorpora estados `walk1/walk2`, interpolación entre filas y reserva del destino**, con pruebas Node de rondas completas; falta certificar ese movimiento en Chrome/Pages y separar el motor de React. El editor móvil, fuentes en español, mapa/colisión, copia de desafíos, progreso y Pages deben superar gates de navegador por SHA. La documentación histórica no sustituye pruebas sobre el despliegue actual.
 
 ## 2. Principio de diseño: dificultad mediante decisiones, no solo castigos
 
@@ -44,7 +44,7 @@ Usar **introducción → práctica → giro → combinación → examen → aliv
 | M23 | Objetivos múltiples | Escoger rapidez vs abandono vs seguridad | Contrato claro, sin suma opaca | Medio | Una métrica domina a las demás |
 | M24 | Reto asimétrico compartido | Un amigo mejora el mapa inicial bajo la misma semilla | Diff de cintas y puntuación comparable | Medio | Versión de reglas distinta vuelve injusto el reto |
 
-Los IDs M10/M12/M13/M14/M17 requieren primero un motor de estados y un modelo visual de movimiento con trayectorias físicas. Nunca simularlos solamente cambiando texto o contadores.
+Los IDs M10/M12/M13/M14/M17 requieren primero un motor de estados extraído y validación de trayectorias físicas **más allá** de la interpolación actual entre filas. Nunca simularlos solamente cambiando texto o contadores.
 
 ## 3. Campaña propuesta: 36 rondas nuevas después de los tres mapas actuales
 
@@ -128,7 +128,7 @@ type RoundDefinition = {
 
 - `rulesVersion + seed + roundId + startingLayout` determina eventos y resultados; el reloj de simulación es el único reloj de efectos. Versionar enlaces `challenge` y no comparar marcas de reglas diferentes.
 - Catálogo de eventos determinista, con `precondition → apply → invariant → log`. Ningún evento duplica o desaparece pasajeros, cierra *todos* los destinos por accidente o cambia el servicio en curso retroactivamente sin anunciarlo.
-- Mover una persona de fila exige una secuencia `queue → walk-to-queue → queued`, reservando el destino; el servicio no comienza mientras camina. Cancelar/replanear una ruta conserva posición válida.
+- Mover una persona de fila ya usa `choice → walk1/walk2 → queued`, reservando el destino, con secuencia FIFO asignada al llegar; los tests de rondas completas de `main` cubren esta transición. Hay que preservar ese contrato al extraer el motor, y probar en navegador la interpolación/hit-testing y cualquier obstáculo nuevo; el servicio nunca debe comenzar mientras camina.
 - Al cargar, un validador comprueba alcanzabilidad, conexiones seguras, carril accesible, capacidad mínima, objetivos físicamente posibles, ausencia de fuentes ocultas de puntos infinitos y longitud máxima. Ante mapa irresoluble, explica el conflicto y ofrece una edición deshacer.
 - Score de campaña debe ser comparativo por *ronda* o normalizado en condiciones equivalentes; la fórmula v5 con denominador 28 no se reutiliza sin ajuste cuando hay 42 pasajeros o ventanas de conexión. Guardar ledger por evento para resultados atribuibles.
 - Un paquete de ronda debe incluir escena/sprite y señales accesibles, copia es-PE, texto de tutorial, una configuración "fácil" elegida voluntariamente, archivos de QA y fixtures de replay.
@@ -171,7 +171,7 @@ Asignar variante por participante, no por click/turno; mantener asignación cons
 | Prioridad | Ticket | Estado actual | Condición de cierre |
 | --- | --- | --- | --- |
 | P0 | RND-00 Versión v5 congelada y comparación determinista | **No iniciado** | Tres mapas/semillas y ledger de score idénticos |
-| P0 | RND-01 Motor `step()` puro, cola caminante y reservas | **No iniciado** | Tests por tick + sprites sin salto + 1×/2× iguales |
+| P0 | RND-01 Extraer `step()` puro conservando cola caminante y reservas existentes | **Parcial**: `walk1/walk2` y fixtures de ronda completa ya están en `main`; extracción pendiente | Tests por tick del motor extraído + sprites sin salto en navegador + 1×/2× iguales |
 | P0 | RND-02 Esquema `RoundDefinition`/validador | **Diseñado, no implementado** | Cargas válidas + rechazos seguros + reglas versionadas |
 | P1 | RND-03 R04/R05 oleadas, tutorial y predicción | **Pendiente** | Jugable + fixtures + screenshots + UAT |
 | P1 | RND-04 R10/R11 relevos y ritmo desigual | **Pendiente** | Aviso anticipado y fallbacks, solo una variable A/B |
