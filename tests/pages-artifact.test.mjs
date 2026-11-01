@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { releaseAssets, checkReleaseManifest, cssFontUrls } from "../scripts/verify-live-pages.mjs";
 
 const out = path.resolve("dist/pages");
 
@@ -37,4 +38,17 @@ test("automatic Pages workflow never publishes raw repository files", async () =
   assert.match(workflow, /run:\s*npm run test:pages/, "Pages must validate the built artifact before upload");
   assert.match(workflow, /run:\s*npm run typecheck:pages/, "Pages must type-check the game");
   assert.match(workflow, /needs:\s*verify-and-package/, "Deployment must require the verification job");
+});
+
+test("external Pages verifier rejects stale releases and validates the real built HTML/CSS", async () => {
+  const html = await readFile(path.join(out,"index.html"),"utf8");
+  const manifest = JSON.parse(await readFile(path.join(out,"version.json"),"utf8"));
+  checkReleaseManifest(manifest,manifest.sourceRevision);
+  const names = releaseAssets(html,manifest.sourceRevision);
+  assert.ok(names.length>=2);
+  const cssName = names.find(name => name.endsWith(".css")).split("/").at(-1);
+  const css = await readFile(path.join(out,"assets",cssName),"utf8");
+  assert.ok(cssFontUrls(css,"https://pillb.github.io/gategame/assets/"+cssName).length>0);
+  assert.throws(()=>releaseAssets(html,"0000000000000000000000000000000000000000"),/stale/i);
+  assert.throws(()=>releaseAssets(html.replace(/\\/g,"/").replace(/src="\\/g,'src="/src/main.tsx"'),manifest.sourceRevision),/Uncompiled source/i);
 });
