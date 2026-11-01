@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment, createNativeShareData } from "../lib/challenges.js";
+import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment, createNativeShareData, describeRoundDelta } from "../lib/challenges.js";
 
 test("challenge score parser is strict, bounded and never interprets HTML or decimals", () => {
   assert.equal(parseChallengeScore("0"), 0);
@@ -64,4 +64,19 @@ test("native sharing payload matches the challenge and never duplicates or leaks
   assert.throws(() => createNativeShareData({ score: 948, processed: 25, target: 28, url: link }), /corresponde/i);
   assert.throws(() => createNativeShareData({ score: 947, processed: 29, target: 28, url: link }), /válida/i);
   assert.throws(() => createNativeShareData({ score: 947, processed: 25, target: 28, url: "javascript:alert(1)" }), /corresponde/i);
+});
+
+test("last-round feedback is exact, empathetic, seeded and never fabricates bonuses", () => {
+  assert.deepEqual(describeRoundDelta(946, 947), {
+    delta: 1, tone: "improved",
+    text: "Mejoraste 1 punto frente al turno anterior. ¿Qué cinta hizo la diferencia?",
+  });
+  assert.equal(describeRoundDelta(947, 933).delta, -14);
+  assert.match(describeRoundDelta(947, 933).text, /14 puntos menos/);
+  assert.equal(describeRoundDelta(947, 947, true).tone, "tied");
+  assert.match(describeRoundDelta(947, 947, true).text, /mismo diseño/i);
+  assert.match(describeRoundDelta(947, 947, false).text, /Empataste/i);
+  for (const [before, after] of [[-1, 20], [947.4, 947], [1000, 1001], [null, 10]]) {
+    assert.throws(() => describeRoundDelta(before, after), /no son válidas/i);
+  }
 });
