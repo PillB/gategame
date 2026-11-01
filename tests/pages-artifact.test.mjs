@@ -50,5 +50,6 @@ test("external Pages verifier rejects stale releases and validates the real buil
   const css = await readFile(path.join(out,"assets",cssName),"utf8");
   assert.ok(cssFontUrls(css,"https://pillb.github.io/gategame/assets/"+cssName).length>0);
   assert.throws(()=>releaseAssets(html,"0000000000000000000000000000000000000000"),/stale/i);
-  assert.throws(()=>releaseAssets(html.replace(/\\/g,"/").replace(/src="\\/g,'src="/src/main.tsx"'),manifest.sourceRevision),/Uncompiled source/i);
+  const rawPage = html.replace("</head>", '<script src="/src/main.tsx"></script></head>');
+  assert.throws(() => releaseAssets(rawPage, manifest.sourceRevision), /Uncompiled source/i);
 });
