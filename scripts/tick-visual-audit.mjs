@@ -115,8 +115,17 @@ function expectedMetrics(sim, roundId) {
 async function audit({ roundId, button, expectedScore, expectedElapsed }, url) {
   await send("Page.navigate", { url });
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
-  await clickButton(button);
-  await waitFor(`document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes(${JSON.stringify(roundId.toUpperCase())})`);
+  // A heading can be present before the bundled React client has mounted.
+  // The first CI attempt clicked inert pre-hydration markup and timed out.
+  await waitFor("document.readyState==='complete' && !!document.querySelector('.round-picker button')");
+  await sleep(250);
+  const isSelected=`document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes(${JSON.stringify(roundId.toUpperCase())})`;
+  for(let attempt=0;attempt<3;attempt++){
+    if(await evaluate(isSelected))break;
+    await clickButton(button);
+    await sleep(250);
+  }
+  assert.equal(await evaluate(isSelected),true,`React mission selection never committed for ${roundId}`);
   await clickButton("División guiada");
   await screenshot(`${roundId}/intro`, { full: true });
   await clickButton("Iniciar turno");
@@ -133,15 +142,27 @@ async function audit({ roundId, button, expectedScore, expectedElapsed }, url) {
     assert.deepEqual(ui, expected, `Visual/engine divergence ${roundId} tick ${i+1}`);
     assert.equal(sim.spawned, sim.agents.length);
     assert.equal(sim.spawned, expected.active + sim.cleared + sim.failed + sim.turnedAway + sim.abandoned);
+    const resolved=TARGET-expected.remaining;
+    const awaitingArrival=TARGET-sim.spawned;
+    const allPending=expected.active+awaitingArrival;
+    assert.equal(awaitingArrival+sim.spawned,TARGET);
+    assert.equal(resolved+allPending,TARGET,`${roundId} unresolved player count at tick ${i+1}`);
+    assert.ok(awaitingArrival>=0 && expected.active>=0 && resolved>=0);
+    const scoring=scoreShiftBreakdown({processed:sim.cleared,elapsed:scoredElapsed(roundId,sim.elapsed),
+      retries:sim.retries,target:TARGET,turnedAway:sim.turnedAway,abandoned:sim.abandoned,
+      complete:expected.finished,smartSwitches:sim.queueSwitches,repairs:sim.repairs,
+      faultsLeft:sim.faults.filter((f)=>!f.repaired).length});
+    assert.equal(scoring.total,expected.score,`${roundId} score-ledger discrepancy at tick ${i+1}`);
     const image = await screenshot(`${roundId}/tick-${String(i+1).padStart(4,"0")}`, {clip});
     hashes.add(image); ticks++;
     const phases = Object.fromEntries([...new Set(sim.agents.map((a)=>a.stage))]
       .map((stage)=>[stage,sim.agents.filter((a)=>a.stage===stage).length]));
     rows.push(JSON.stringify({tick:i+1,elapsed:+sim.elapsed.toFixed(3),spawned:sim.spawned,
-      resolved:TARGET-expected.remaining,active:expected.active,remaining:expected.remaining,
+      awaitingArrival,resolved,active:expected.active,remaining:expected.remaining,
+      allPending,
       cleared:sim.cleared,turnedAway:sim.turnedAway,abandoned:sim.abandoned,failed:sim.failed,
       queued:expected.queued,retries:sim.retries,switches:sim.queueSwitches,repairs:sim.repairs,
-      score:expected.score,phases,frameSha256:image}));
+      score:expected.score,scoring,phases,frameSha256:image}));
     if (!sim.running) break;
   }
   assert.equal(sim.running,false,`${roundId} did not finish within ${maxTicks*DT}s`);

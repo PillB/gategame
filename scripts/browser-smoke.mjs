@@ -196,6 +196,11 @@ try{
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=waves-1"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947') && document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')");
   await screenshot("10-round-shared-challenge");
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=1000&round=r04&rules=waves-1"});
+  await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('igualar')");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/igualar los 1000 puntos máximos/,
+    "Receiving the maximum possible score must not instruct an impossible beat-1000 win");
+  await screenshot("11-perfect-shared-challenge");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=wrong"});
   await waitFor("document.querySelector('.toolbar')?.textContent.includes('versión de reglas desconocida')");
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false);

@@ -489,7 +489,11 @@ export default function Home() {
         if (challenge) {
           const targetScore = parseChallengeScore(query.get("beat"));
           if (targetScore !== null && challengeRound !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
-          setMessage(challengeRound === null ? "El reto usa una versión de reglas desconocida. Se cargó el diseño sin una puntuación comparable." : "Reto recibido: modifica las cintas para superar la puntuación original con las mismas llegadas.");
+          setMessage(challengeRound === null
+            ? "El reto usa una versión de reglas desconocida. Se cargó el diseño sin una puntuación comparable."
+            : targetScore === 1000
+              ? "Reto perfecto recibido: ajusta las cintas para igualar los 1000 puntos máximos con las mismas llegadas."
+              : "Reto recibido: modifica las cintas para superar la puntuación original con las mismas llegadas.");
         }
       }
       const savedBest = Number(safeRead(challengeRound && challengeRound !== DEFAULT_ROUND ? `gateflow-best-${challengeRound}-waves-1` : "gateflow-best-v2") ?? 0);
@@ -636,7 +640,9 @@ export default function Home() {
     if (typeof navigator.share !== "function") { await copyScorecard(); return; }
     try {
       await navigator.share(payload);
-      setMessage("Compartiste un desafío que tus amigos pueden mejorar cambiando las cintas.");
+      setMessage(score === 1000
+        ? "Compartiste un reto perfecto: tus amigos pueden intentar igualar los 1000 puntos cambiando las cintas."
+        : "Compartiste un desafío que tus amigos pueden mejorar cambiando las cintas.");
     } catch (error) {
       // Cancel is an intentional user decision; never copy or contact anyone after cancellation.
       if (error instanceof Error && error.name === "AbortError") {

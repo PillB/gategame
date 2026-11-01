@@ -97,3 +97,16 @@ test("last-round feedback is exact, empathetic, seeded and never fabricates bonu
     assert.throws(() => describeRoundDelta(before, after), /no son válidas/i);
   }
 });
+
+test("perfect-score challenges never promise an impossible >1000 victory", () => {
+  const url=createChallengeUrl("https://pillb.github.io/gategame/","G1",1000,"r04");
+  const text=createNativeShareData({score:1000,processed:25,target:28,url}).text;
+  assert.match(text,/igualar.*1000/i);
+  assert.doesNotMatch(text,/superar/i);
+  assert.match(challengePrompt(1000,false),/igualar.*1000/i);
+  assert.match(challengePrompt(1000,true,1000),/perfecto igualado/i);
+  assert.match(challengePrompt(1000,true,999),/intenta igualar/i);
+  assert.doesNotMatch(challengePrompt(1000,false),/superar los 1000/i);
+  assert.match(nextRoundExperiment({score:1000}),/conservar.*1000/i);
+  assert.equal(compareChallengeScore(1000,1000).outcome,"tied","A tie is honest, not a claimed win");
+});

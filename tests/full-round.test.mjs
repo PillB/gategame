@@ -205,3 +205,38 @@ test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layo
     }
   }
 });
+
+test("a single player belt edit has a causal, reproducible effect in each new mission", () => {
+  for (const roundId of ["r04","r05"]) {
+    const base = fullRound(GUIDED,{roundId});
+    const variants = GUIDED.flatMap((group,grid)=>group.map((edge,index)=>{
+      const layout = GUIDED.map((edges)=>edges.map((item)=>({...item})));
+      layout[grid].splice(index,1);
+      const outcome = fullRound(layout,{roundId});
+      return {removed:`${grid}:${edge.from}>${edge.to}`,score:outcome.score,
+        cleared:outcome.state.cleared,abandoned:outcome.state.abandoned,
+        retries:outcome.state.retries,elapsed:+outcome.state.elapsed.toFixed(1)};
+    }));
+    assert.ok(variants.some((candidate)=>candidate.score!==base.score),
+      `${roundId} all one-belt changes were cosmetic`);
+    assert.ok(new Set(variants.map((item)=>item.score)).size>=2,
+      `${roundId} all modified layouts produced the same score`);
+    console.info("GATEFLOW_CAUSAL_BELT "+JSON.stringify({roundId,baseScore:base.score,
+      highest:variants.reduce((a,b)=>a.score>=b.score?a:b),
+      lowest:variants.reduce((a,b)=>a.score<=b.score?a:b)}));
+  }
+});
+
+test("arrival complication flips which starter layout performs better (non-cosmetic interaction)", () => {
+  const r04Guided=fullRound(GUIDED,{roundId:"r04"}).score;
+  const r04Open=fullRound([[],[]],{roundId:"r04"}).score;
+  const r05Guided=fullRound(GUIDED,{roundId:"r05"}).score;
+  const r05Open=fullRound([[],[]],{roundId:"r05"}).score;
+  const openAdvantageR04=r04Open-r04Guided;
+  const openAdvantageR05=r05Open-r05Guided;
+  assert.equal(openAdvantageR04,76);
+  assert.equal(openAdvantageR05,-56);
+  assert.equal(openAdvantageR04-openAdvantageR05,132);
+  console.info("GATEFLOW_STRATEGY_CROSSOVER "+JSON.stringify({r04:{guided:r04Guided,open:r04Open},
+    r05:{guided:r05Guided,open:r05Open},interaction:132}));
+});
