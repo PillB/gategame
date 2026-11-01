@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChallengeScore, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment, createNativeShareData } from "../lib/challenges.js";
+import { parseChallengeScore, parseChallengeRound, createChallengeUrl, compareChallengeScore, challengePrompt, nextRoundExperiment, createNativeShareData, describeRoundDelta } from "../lib/challenges.js";
 
 test("challenge score parser is strict, bounded and never interprets HTML or decimals", () => {
   assert.equal(parseChallengeScore("0"), 0);
@@ -22,6 +22,23 @@ test("shared URLs preserve an exact layout and canonical score, dropping unrelat
     assert.throws(() => createChallengeUrl("https://pillb.github.io/gategame/", code, score), /no son válidos/i);
   }
   assert.throws(() => createChallengeUrl("javascript:alert(1)", "G1", 42), /no es válido/i);
+});
+
+test("new-round challenges preserve their deterministic schedule and reject incompatible rules", () => {
+  assert.equal(parseChallengeRound(null, null), "classic", "old G1 challenges must still play");
+  for (const round of ["r04", "r05"]) {
+    const url = new URL(createChallengeUrl("https://pillb.github.io/gategame/?round=r05&rules=bad#frag", "G1.A", 923, round));
+    assert.equal(url.searchParams.get("round"), round);
+    assert.equal(url.searchParams.get("rules"), "waves-1");
+    assert.equal(parseChallengeRound(url.searchParams.get("round"), url.searchParams.get("rules")), round);
+    assert.match(createNativeShareData({score:923,processed:25,target:28,url:url.toString()}).text, /923 puntos/);
+  }
+  for (const [round, rules] of [["r04", null], ["r04", "other"], ["unknown", "waves-1"], ["classic", "waves-1"], [null, "waves-1"]]) {
+    assert.equal(parseChallengeRound(round, rules), null, "Incompatible rule set was accepted");
+  }
+  assert.throws(() => createChallengeUrl("https://example.com", "G1", 900, "r39"), /no son válidos/i);
+  const tampered = createChallengeUrl("https://example.com", "G1", 900, "r04").replace("waves-1", "waves-0");
+  assert.throws(() => createNativeShareData({score:900,processed:25,target:28,url:tampered}), /corresponde/i);
 });
 
 test("challenge results distinguish win, tie and loss without rounding or data mutation", () => {
@@ -64,4 +81,19 @@ test("native sharing payload matches the challenge and never duplicates or leaks
   assert.throws(() => createNativeShareData({ score: 948, processed: 25, target: 28, url: link }), /corresponde/i);
   assert.throws(() => createNativeShareData({ score: 947, processed: 29, target: 28, url: link }), /válida/i);
   assert.throws(() => createNativeShareData({ score: 947, processed: 25, target: 28, url: "javascript:alert(1)" }), /corresponde/i);
+});
+
+test("last-round feedback is exact, empathetic, seeded and never fabricates bonuses", () => {
+  assert.deepEqual(describeRoundDelta(946, 947), {
+    delta: 1, tone: "improved",
+    text: "Mejoraste 1 punto frente al turno anterior. ¿Qué cinta hizo la diferencia?",
+  });
+  assert.equal(describeRoundDelta(947, 933).delta, -14);
+  assert.match(describeRoundDelta(947, 933).text, /14 puntos menos/);
+  assert.equal(describeRoundDelta(947, 947, true).tone, "tied");
+  assert.match(describeRoundDelta(947, 947, true).text, /mismo diseño/i);
+  assert.match(describeRoundDelta(947, 947, false).text, /Empataste/i);
+  for (const [before, after] of [[-1, 20], [947.4, 947], [1000, 1001], [null, 10]]) {
+    assert.throws(() => describeRoundDelta(before, after), /no son válidas/i);
+  }
 });

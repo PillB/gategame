@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { queueWalkLane, scoreShiftBreakdown, simulationInterval } from "../lib/simulation.js";
+import { ROUNDS, arrivalAt } from "../lib/rounds.js";
 
 // Compile the ACTUAL simulation functions from the shipped UI, not a second,
 // potentially divergent implementation. React is never mounted in this test.
@@ -19,6 +20,7 @@ const output = ts.transpileModule(source, { fileName: "page.tsx", compilerOption
 const sandbox = { exports: {}, module: { exports: {} }, require: (id) => {
   if (id === "@/lib/simulation.js") return require("../lib/simulation.js");
   if (id === "@/lib/challenges.js") return require("../lib/challenges.js");
+  if (id === "@/lib/rounds.js") return require("../lib/rounds.js");
   return require(id);
 }};
 sandbox.module.exports = sandbox.exports;
@@ -41,15 +43,25 @@ const REPAIRED_BASELINES = Object.freeze({
 });
 
 
-function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
+function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "classic" } = {}) {
   let state = { ...blank(), running: true };
   let walkingSeen = 0;
   let switchesInferred = 0;
+  const landings = [];
+  const announcements = new Set();
   for (let step = 0; step < maxTicks; step++) {
     if (flagFaults) state = { ...state, faults: state.faults.map(f => ({ ...f, flagged: true })) };
     const prior = new Map(state.agents.map(a => [a.id, a]));
     const previous = state;
-    const next = tick(state, layout);
+    const next = tick(state, layout, roundId);
+    for (const event of next.events) if (event.id.endsWith("-landing")) announcements.add(event.id);
+
+    if (next.spawned > previous.spawned) {
+      for (let i = previous.spawned; i < next.spawned; i++) {
+        assert.ok(next.elapsed >= arrivalAt(roundId, i) - 1e-7, "Passenger arrived before the advertised flight");
+        landings.push(i);
+      }
+    }
 
     assert.equal(next.spawned, next.agents.length, "No duplicated/lost passenger objects");
     assert.equal(next.spawned, next.agents.filter(a => !terminal.has(a.stage)).length +
@@ -99,7 +111,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700 } = {}) {
         abandoned:state.abandoned,complete:true,smartSwitches:state.queueSwitches,
         repairs:state.repairs,faultsLeft:state.faults.filter(f=>!f.repaired).length});
       assert.ok(score.total>=0 && score.total<=1000);
-      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total };
+      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, announcements: [...announcements] };
     }
   }
   assert.fail("Round did not resolve within "+(maxTicks*DT)+" simulated seconds");
@@ -153,5 +165,28 @@ test("faults flagged on detection never break conservation or deterministic comp
       repaired.state.cleared !== baseline.state.cleared ||
       repaired.state.elapsed !== baseline.state.elapsed,
       "Repairing faults unexpectedly lowered score with identical throughput/time");
+  }
+});
+
+test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layout variants", () => {
+  for (const round of ROUNDS.filter((item) => item.id !== "classic")) {
+    assert.equal(round.arrivals.length, TARGET);
+    assert.equal(round.waves.reduce((sum, wave) => sum + wave.count, 0), TARGET);
+    assert.ok(round.title && round.story && round.decision && round.payoff);
+    assert.ok(round.waves.every((wave, index) => index === 0 || wave.at > round.waves[index-1].at));
+    for (const [name, layout] of scenarios) {
+      const first = fullRound(layout, { roundId: round.id });
+      const second = fullRound(layout, { roundId: round.id });
+      assert.equal(JSON.stringify(first.state), JSON.stringify(second.state), `Replay diverged: ${round.id}/${name}`);
+      assert.deepEqual(first.landings, Array.from({length:TARGET},(_,i)=>i));
+      assert.equal(first.announcements.length, round.waves.length, `Missing whimsical announcement: ${round.id}/${name}`);
+      assert.ok(first.walkingSeen > 0, `Walking stages missing: ${round.id}/${name}`);
+      assert.equal(first.score, second.score);
+      assert.ok(first.state.elapsed >= round.arrivals.at(-1));
+      assert.equal(first.state.cleared + first.state.failed + first.state.turnedAway + first.state.abandoned, TARGET);
+      console.info("GATEFLOW_NEW_ROUND "+JSON.stringify({round:round.id,preset:name,
+        elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,abandoned:first.state.abandoned,
+        score:first.score,walking:first.walkingSeen}));
+    }
   }
 });

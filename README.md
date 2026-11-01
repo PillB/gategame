@@ -19,7 +19,7 @@ The migration baseline was the Gateflow v5 Sites source at commit `8dbe2148b47d0
 | `npm run lint` | Lint the repository |
 | `npm run typecheck:pages` | Type-check Pages gameplay and adapter without emitting files; Worker typings are intentionally outside this gate |
 | `npm run test:simulation` | Test deterministic game logic |
-| `npm run test:rounds` | Check 12 prospective later-round A/B parameter pairs and 8 two-factor stress interactions using a simplified, deterministic queue model (not the live game) |
+| `npm run test:rounds` | Check 12 surrogate A/B parameter pairs and 8 interactions; validate 24 delight contracts, 36 story beats and two playable mission schedules with real-engine invariants |
 | `npm run compare:rounds` | Print 128-seed paired difficulty-screening results; not a human A/B experiment |
 | `npm test` | Test simulation, build the Cloudflare Worker, check its artifact and rendered page metadata |
 | `npm run build:pages` | Compile independent static assets into `dist/pages/` with project base `/gategame/` |
@@ -34,7 +34,7 @@ The GitHub Pages adapter consists of `index.html`, `src/main.tsx`, `src/fonts.cs
 
 ## Live deployment and privacy
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for an operator checklist. `.github/workflows/ci.yml` runs on pull requests and pushes to `main` but **does not deploy**. `.github/workflows/pages.yml` deploys the GitHub Pages test site **only on a manually initiated `workflow_dispatch` from `main`** after all quality gates pass; GitHub Pages must first be configured with **Source: GitHub Actions** in repository settings.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for an operator checklist. `.github/workflows/ci.yml` runs quality gates on pull requests and `main` pushes and **does not deploy**. `.github/workflows/static.yml` is the **canonical automatic Pages publisher** on `main` pushes: it installs from the lockfile, lints, checks TypeScript, runs the simulation and Worker artifact tests, builds the static Pages bundle, executes headless Chrome through all three presets (including mobile and challenge flows), uploads screenshot evidence, and publishes **only `dist/pages`** if every gate passes. `.github/workflows/pages.yml` remains an optional manually dispatched recovery workflow on `main`; do not run it concurrently with the automatic publisher. GitHub Pages Source must be **GitHub Actions**.
 
 The expected public test URL is `https://pillb.github.io/gategame/`. Check `https://pillb.github.io/gategame/version.json` to compare the deployed 40-character source commit SHA against the GitHub Actions run. **Making the repository private later does not necessarily make its existing Pages site private**. Disable the Pages site (or migrate to an access-controlled host) once user acceptance testing is complete if the site must no longer be publicly accessible.
 
@@ -47,4 +47,8 @@ The expected public test URL is `https://pillb.github.io/gategame/`. Check `http
 
 The source is browser-executed and local-state gameplay; browser storage can persist game saves. Test from a fresh incognito profile as well as an existing save, and do not rely on an old browser tab to verify a new release.
 
-The [gameplay specification](docs/GAME_SPEC.md) defines the authoritative phases, mechanics, implementation priorities, and acceptance criteria. The [later-round expansion plan](docs/ROUND_EXPANSION_SPEC.md) proposes 36 new rounds, 24 complication types, and falsifiable A/B experiments; **none of these proposed rounds is live**. The [QA ledger](docs/QA_LEDGER.md) distinguishes local tests, public Pages verification and human acceptance; unchecked gates are not done. Resolve conflicts between prose claims and the actual simulation in favor of reproducible test evidence, then update both the specification and implementation under review.
+The [gameplay specification](docs/GAME_SPEC.md) defines the authoritative mechanics. The [later-round plan](docs/ROUND_EXPANSION_SPEC.md) and [delight ledger](docs/DELIGHT_LEDGER.md) propose 24 complications across 36 new episodes. **R04 and R05 have playable draft-branch prototypes but are not in the published site; R06–R39 are designed, not implemented.** The [QA ledger](docs/QA_LEDGER.md) distinguishes source, public Pages, human tests and pending gates. Resolve conflicting claims using tests against the exact deployed commit.
+
+## Latest release and player acceptance
+
+The public site is **a testing deployment**, not the private ChatGPT Site. Its revision marker is `/gategame/version.json`; compare that 40-character `sourceRevision` with the successful GitHub Pages Actions run. A green deployment alone is not external HTTP/browser verification. The GitHub-hosted Chrome run tests the compiled `dist/pages` artifact and retains screenshots, but final iOS Safari, touch/VoiceOver, real-share-sheet, external URL and human enjoyment checks remain open. See [latest release ledger](docs/RELEASE_LEDGER.md) and [open QA issues](https://github.com/PillB/gategame/issues).

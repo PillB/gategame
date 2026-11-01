@@ -53,10 +53,10 @@ async function screenshot(name){
   const image=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:true});
   await writeFile(path.join(evidence,name+".png"),Buffer.from(image.data,"base64"));
 }
-async function fullRound(preset,name){
+async function fullRound(preset,name,expectedCleared=25){
   await clickButton(preset);
   await clickButton("2× Rápido");
-  assert.equal(await evaluate("document.querySelector('button[aria-pressed=true]')?.textContent.includes('2× Rápido')"),true);
+  assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes('2× Rápido')"),true);
   await clickButton("Iniciar turno");
   await waitFor("document.querySelector('.metrics article:first-child strong')?.textContent!=='00:00'",7000);
   await screenshot(name+"-running");
@@ -69,7 +69,12 @@ async function fullRound(preset,name){
   }
   const data=await evaluate("(()=>({score:Number(document.querySelector('.debrief-copy strong')?.textContent),cleared:document.querySelector('.debrief-copy')?.textContent,layout:document.querySelector('.toolbar .label')?.textContent}))()");
   assert.ok(Number.isInteger(data.score)&&data.score>=0&&data.score<=1000,JSON.stringify(data));
-  assert.match(data.cleared,/25\/28/,"Passenger count unexpected");
+  assert.match(data.cleared,new RegExp(expectedCleared+"/28"),"Passenger count unexpected");
+  const delta=await evaluate("document.querySelector('.round-delta')?.textContent||''");
+  if(name==="02-guided")assert.equal(delta,"","First result has no previous-round comparison");
+  if(name==="04-serpentine")assert.match(delta,/72 puntos menos/,"Second round must compare to Guided 868");
+  if(name==="05-open-floor")assert.match(delta,/Mejoraste 137 puntos/,"Third round must compare to Serpentine 796");
+  if(name==="08-r04"||name==="09-r05")assert.equal(delta,"","Changing missions must reset comparison baseline");
   await screenshot(name+"-debrief");
   console.info("BROWSER_ROUND "+JSON.stringify({preset,score:data.score,detail:data.cleared,layout:data.layout}));
 }
@@ -101,7 +106,8 @@ try{
     if(msg.id&&pending.has(msg.id)){
       const p=pending.get(msg.id);
       clearTimeout(p.timeout);pending.delete(msg.id);
-      msg.error?p.reject(Error(msg.error.message)):p.resolve(msg.result);
+      if(msg.error)p.reject(Error(msg.error.message));
+      else p.resolve(msg.result);
     }
     if(msg.method==="Runtime.exceptionThrown")errors.push("JS "+JSON.stringify(msg.params.exceptionDetails?.text));
     if(msg.method==="Network.loadingFailed"&&!msg.params.canceled)errors.push("NETWORK "+msg.params.errorText);
@@ -126,7 +132,7 @@ try{
   assert.equal(await evaluate("document.querySelectorAll('.game-canvas').length"),1);
   for(const speed of ["½ Lento","1× Normal","2× Rápido"]){
     await clickButton(speed);
-    assert.equal(await evaluate("document.querySelector('button[aria-pressed=true]')?.textContent.includes("+JSON.stringify(speed)+")"),true);
+    assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes("+JSON.stringify(speed)+")"),true);
   }
   const startLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   await clickButton("Serpentina");
@@ -146,14 +152,29 @@ try{
   await clickButton("Copiar desafío");
   await fullRound("Serpentina","04-serpentine");
   await fullRound("Espacio libre","05-open-floor");
+  await clickButton("R04 · Las maletas cantoras");
+  assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')"),true);
+  assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  await fullRound("División guiada","08-r04");
+  await clickButton("R05 · Dos vuelos, una pista");
+  assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),2);
+  await fullRound("Espacio libre","09-r05",24);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");
   assert.ok(width.document<=width.viewport+3,"Mobile viewport overflow "+JSON.stringify(width));
+  const shortTargets=await evaluate("([...document.querySelectorAll('.debrief-actions button,.top-actions button,.toolbar-controls button,.run,.score-ledger summary')].filter(x=>getComputedStyle(x).display!=='none'&&x.getBoundingClientRect().height<43.5).map(x=>({text:x.textContent,height:x.getBoundingClientRect().height})))");
+  assert.deepEqual(shortTargets,[],"Small touch targets in mobile view "+JSON.stringify(shortTargets));
   await screenshot("06-mobile-debrief");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947')");
   await screenshot("07-shared-challenge");
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=waves-1"});
+  await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947') && document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')");
+  await screenshot("10-round-shared-challenge");
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=wrong"});
+  await waitFor("document.querySelector('.toolbar')?.textContent.includes('versión de reglas desconocida')");
+  assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false);
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=1001"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);

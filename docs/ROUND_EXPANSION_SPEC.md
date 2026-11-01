@@ -1,6 +1,6 @@
 # Gateflow — expansión de rondas, mecánicas y experimentos
 
-**Estado (31 oct 2026, Perú):** diseño propuesto + cribado reproducible de 12 comparaciones A/B y 8 pruebas de interacción, con un modelo simplificado. **Ninguna ronda nueva está integrada, publicada ni validada con jugadores.** La Site privada v5 no debe modificarse; este trabajo pertenece al repositorio público de pruebas `PillB/gategame`. La aprobación del dueño y las pruebas de aceptación siguen siendo obligatorias.
+**Estado (1 nov 2026, UTC):** diseño propuesto + cribado reproducible de 12 comparaciones A/B y 8 interacciones con un modelo simplificado. **R04/R05 tienen ahora un prototipo jugable con llegadas, pronóstico y replay determinista en una rama draft; ninguna ronda nueva está publicada o validada con jugadores.** R06–R39 siguen como propuestas. La Site privada v5 no debe modificarse; este trabajo pertenece al repositorio público de pruebas `PillB/gategame`. La aprobación del dueño y las pruebas de aceptación siguen siendo obligatorias. Ver [contrato de encanto y anécdotas de los 36 episodios](./DELIGHT_LEDGER.md).
 
 ## 1. Lo que se conserva de las conversaciones previas
 
@@ -48,7 +48,7 @@ Los IDs M10/M12/M13/M14/M17 requieren primero un motor de estados extraído y va
 
 ## 3. Campaña propuesta: 36 rondas nuevas después de los tres mapas actuales
 
-El contenido es modular; `R04–R39` son identificadores propuestos, **no contenido jugable hoy**. Cada ronda tiene un verbo de solución y una idea nueva comprobable. Las rondas de examen combinan mecánicas ya enseñadas; las de alivio dan margen para experimentar y compartir.
+El contenido es modular; `R04–R39` son identificadores de diseño, **R04 y R05 son candidatos jugables solo en el draft**, y los demás siguen pendientes. Cada ronda tiene un verbo de solución y una idea nueva comprobable. Las rondas de examen combinan mecánicas ya enseñadas; las de alivio dan margen para experimentar y compartir.
 
 | Acto | Rondas (tema y reto específico) | Dominio exigido / cadencia |
 | --- | --- | --- |
@@ -108,9 +108,9 @@ IX03, IX04 e IX05 son la razón para **no mezclar todas las complicaciones** en 
 3. **Prototipo vertical C:** R16, inspección larga con alternativa de desvío. Comparar *ETA del puesto* vs *solo cola visible*, mismas duraciones: medir cambios de layout y errores.
 4. **No priorizar todavía:** castigar paciencia (AB06), carril exprés (AB11), niebla de información (M17), familias (M12) o accesibilidad restringida (M13) antes de tener motor físico, caminos sin saltos y pruebas humanas. Accesibilidad de la interfaz **sí** sigue siendo requisito, no variante opcional.
 
-## 5. Contrato técnico de un futuro motor de rondas
+## 5. Contrato técnico de un motor de rondas
 
-La arquitectura actual no admite un `roundId` real. Primero extraer `step(state, action, config)` de React, conservar compatibilidad v5 y crear `RoundDefinition` validado. Configuración propuesta (esquema conceptual):
+La rama de prueba ya pasa `roundId` a `tick`, con un catálogo validado de horarios para R04/R05, pero **no** dispone aún de un motor extraído, validador general de reglas ni acciones/eventos arbitrarios. Primero extraer `step(state, action, config)` de React, conservar compatibilidad v5 y crear `RoundDefinition` completo. Configuración propuesta (esquema conceptual):
 
 ```ts
 type RoundDefinition = {
@@ -172,8 +172,8 @@ Asignar variante por participante, no por click/turno; mantener asignación cons
 | --- | --- | --- | --- |
 | P0 | RND-00 Versión v5 congelada y comparación determinista | **No iniciado** | Tres mapas/semillas y ledger de score idénticos |
 | P0 | RND-01 Extraer `step()` puro conservando cola caminante y reservas existentes | **Parcial**: `walk1/walk2` y fixtures de ronda completa ya están en `main`; extracción pendiente | Tests por tick del motor extraído + sprites sin salto en navegador + 1×/2× iguales |
-| P0 | RND-02 Esquema `RoundDefinition`/validador | **Diseñado, no implementado** | Cargas válidas + rechazos seguros + reglas versionadas |
-| P1 | RND-03 R04/R05 oleadas, tutorial y predicción | **Pendiente** | Jugable + fixtures + screenshots + UAT |
+| P0 | RND-02 Esquema `RoundDefinition`/validador | **Parcial**: catálogo `lib/rounds.js`, `waves-1`, 28 horarios, rechazo de links malversionados; motor general pendiente | Cargas válidas + rechazos seguros + reglas versionadas |
+| P1 | RND-03 R04/R05 oleadas, tutorial y predicción | **Candidato en draft**: UI con selector, pronóstico, landing feed, fixtures y desafíos versionados | Chrome/Pages screenshots + balance real + UAT |
 | P1 | RND-04 R10/R11 relevos y ritmo desigual | **Pendiente** | Aviso anticipado y fallbacks, solo una variable A/B |
 | P1 | RND-05 R16 inspecciones largas y ETA | **Pendiente** | Decisión observable; cero estado imposible |
 | P1 | RND-06 A/B de jugadores con consentimiento | **No iniciado** | Asignación, captura, preregistro y análisis válido |

@@ -2,6 +2,24 @@
 
 This ledger distinguishes **source tests**, **local interactive observations**, **live GitHub Pages observations**, and **user acceptance**. A checked source gate never proves an untested deployed build. The original private Site v5 is the comparator, not the public release candidate.
 
+## Current reconciliation — 1 Nov 2026 UTC (supersedes historical snapshots below)
+
+The earlier tables record real *past* blockers (initial file modes, 404, no walk stages); they should not be read as today's state. The current [release ledger](./RELEASE_LEDGER.md) remains the release source of truth. Latest GitHub `main` seen at `f4437f4`; browser-visible public Pages `version.json` was **`6bca54941358b33dae8b0dd2503f9eb8ff9d9f3d`** at this observation. A visible `Gateflow` page and Spanish controls were loaded from `https://pillb.github.io/gategame/`. **These SHAs differ**, so the latest commit is not yet verified as publicly deployed. The original private Site was not changed.
+
+| Ticket | Status | Evidence / explicit falsifier or next gate |
+| --- | --- | --- |
+| B-01 Public Pages 404 | **Resolved for basic navigation**, freshness OPEN | Cloud Chrome rendered the public game and fetched a valid 40-character `sourceRevision`. Still require current main's SHA plus JS/CSS/font requests verified remotely. |
+| B-02 Full-round engine / FIFO travel | **PASS in Node, browser evidence exists for older main** | `tests/full-round.test.mjs` preserves Guided 868, Serpentine 796, Open Floor 933 with deterministic walking; main's CI browser screenshots exist, but new round branch requires own CI. |
+| B-03 Surprising/whimsical complications | **24 proposals inventoried, 2 playable draft** | `docs/DELIGHT_LEDGER.md` gives each M01–M24 a surprise, an intervention/reward and negative gate; every R04–R39 has an anecdote, choice and payoff; `tests/round-delight.test.mjs` rejects missing entries, not subjective boredom. |
+| B-04 R04/R05 arrival engine | **PASS local deterministic tests, NOT shipped** | R04: 4×7 at 0/11/22/33s; R05: 2×14 at 0/9s; source-state conservation/replay/announcements checked with 3 layouts. Browser-smoke now includes both, not yet run in CI for this branch. |
+| B-05 Comparable shared missions | **PASS unit, UI pending** | New links carry `round=r04/r05&rules=waves-1`; old G1 links remain v5; unknown versions cannot display comparable challenge score. Test browser receiver, clipboard, native device share. |
+| B-06 Fair score/strategy | **Open balance issue** | Same mission scores compare, best and previous-run delta are mission-specific. R04 Guided 799/Open Floor 874; R05 Guided 868/Open Floor 815 with one abandonment. These fixtures prove difficulty changes, **not** that the new rounds are fun. Watch Open Floor dominance, artificial waiting time and impatience spikes. |
+| B-07 Live device experience | **BLOCKED pending draft CI + player device** | Run actual new branch in Chrome at 1440×900 and 390×844, 200% zoom, mobile post tap and screen-reader checks. No local Chrome executable; GitHub-hosted smoke includes new screenshots. |
+| B-08 Human enjoyment / viral share | **NOT STARTED** | Preregister 5–8-person usability pilot then one-factor A/B with sufficient N; measure comprehension, spontaneous retry, enjoyment, frustration, optional share and actual referral, without instrumentation before consent. |
+| B-09 Release safety | **NOT APPROVED** | Keep PR draft, no merge, original private Site unchanged, no repo privacy changes, owner playtest only after exact SHA/UAT gates. |
+
+**Definition of completion:** Every blocker closes only against the falsifier in its row, never because a script exits 0 or a theme sounds delightful. For the two new rounds, closure also requires the owner to play them and say whether the timed forecast creates a worthwhile decision.
+
 ## Provenance and release fields
 
 | Field | State |
