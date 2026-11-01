@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { compareChallengeScore, createChallengeUrl, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
+import { challengePrompt, createChallengeUrl, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -439,7 +439,7 @@ export default function Home() {
         if (challenge) {
           const targetScore = parseChallengeScore(query.get("beat"));
           if (targetScore !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
-          setMessage("Desafío compartido cargado. Juega con el diseño original para comparar puntuaciones.");
+          setMessage("Reto recibido: modifica las cintas para superar la puntuación original.");
         }
       }
       const savedBest = Number(safeRead("gateflow-best-v2") ?? 0);
@@ -471,8 +471,8 @@ export default function Home() {
   const rank = rankShift(score);
   const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: sim.elapsed, target: TARGET });
   const fingerprint = layoutFingerprint(edges);
-  const activeChallengeScore = challengeTarget?.fingerprint === fingerprint ? challengeTarget.score : null;
-  const challengeResult = finished && activeChallengeScore !== null ? compareChallengeScore(score, activeChallengeScore) : null;
+  const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
+  const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
   const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: sim.elapsed, queueSwitches: sim.queueSwitches, score }) : null;
   const flowMood = finished ? (score >= 850 ? "glow" : "settled") : queued <= 2 ? "calm" : queued <= 6 ? "steady" : "pressure";
   const flowLabel = finished ? (score >= 850 ? "FLUJO DOMINADO" : "TURNO FINALIZADO") : flowMood === "calm" ? "FLUJO TRANQUILO" : flowMood === "steady" ? "FLUJO ESTABLE" : "AUMENTA LA PRESIÓN";
@@ -544,7 +544,7 @@ export default function Home() {
   }
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (layoutLocked) return;
-    commitBest(); setSim(blank());
+    commitBest(); setSim(blank()); setChallengeTarget(null);
     setEdges(mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []]);
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
@@ -587,7 +587,7 @@ export default function Home() {
           </div>
         </div>
         <div className="scenario-banner"><span>CADENA DE RELEVOS</span><b>{POST_COLS * POST_ROWS} postes por zona · {CELL_COLS * CELL_ROWS} celdas transitables</b><small>Los módulos cierran para el relevo y la preparación; reabren con otra velocidad. Los pasajeros buscan filas cercanas más cortas.</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
-        {challengeTarget && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{activeChallengeScore === null ? "El diseño cambió: vuelve al original para comparar el reto." : challengeResult ? challengeResult.message : `Supera los ${activeChallengeScore} puntos con este diseño exacto.`}</span></p>}
+        {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
           <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
