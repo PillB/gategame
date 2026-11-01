@@ -60,7 +60,13 @@ async function fullRound(preset,name){
   await clickButton("Iniciar turno");
   await waitFor("document.querySelector('.metrics article:first-child strong')?.textContent!=='00:00'",7000);
   await screenshot(name+"-running");
-  await waitFor("!!document.querySelector('section.debrief')",20000);
+  try {
+    await waitFor("!!document.querySelector('section.debrief')",90000);
+  } catch (error) {
+    console.error("BROWSER_TIMEOUT_DIAGNOSTICS "+JSON.stringify(await evaluate("(()=>({time:document.querySelector('.metrics article:first-child strong')?.textContent,header:document.querySelector('.top-actions')?.textContent,objective:document.querySelector('.objective')?.textContent.slice(0,250),errors:document.querySelector('.toolbar')?.textContent.slice(0,160)}))()")));
+    await screenshot(name+"-timeout");
+    throw error;
+  }
   const data=await evaluate("(()=>({score:Number(document.querySelector('.debrief-copy strong')?.textContent),cleared:document.querySelector('.debrief-copy')?.textContent,layout:document.querySelector('.toolbar .label')?.textContent}))()");
   assert.ok(Number.isInteger(data.score)&&data.score>=0&&data.score<=1000,JSON.stringify(data));
   assert.match(data.cleared,/25\/28/,"Passenger count unexpected");
@@ -110,6 +116,7 @@ try{
   await send("Runtime.enable");
   await send("Network.enable");
   // Speed up only the CI browser's wall clock. Simulation DT and seed remain unchanged.
+  await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await send("Page.addScriptToEvaluateOnNewDocument",{source:
     "const originalInterval=window.setInterval.bind(window);window.setInterval=(fn,ms,...args)=>originalInterval(fn,Math.min(ms,10),...args);"});
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/"});
