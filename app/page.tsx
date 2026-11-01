@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { challengePrompt, createChallengeUrl, createNativeShareData, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
-import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
+import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
 const POST_ROWS = 12;
@@ -13,7 +13,7 @@ const TARGET = 28;
 const DT = 0.1;
 type Edge = { from: string; to: string };
 type Grid = 0 | 1;
-type Stage = "grid1" | "choice1" | "queue1" | "service1" | "grid2" | "choice2" | "queue2" | "service2" | "done" | "failed" | "turnedAway" | "left";
+type Stage = "grid1" | "choice1" | "walk1" | "queue1" | "service1" | "grid2" | "choice2" | "walk2" | "queue2" | "service2" | "done" | "failed" | "turnedAway" | "left";
 type ServiceEvent = { id: string; title: string; short: string; detail: string; multiplier: number; outcome: "clear" | "turnaway"; tone: "good" | "warn" | "alert" };
 type DeskEvent = { id: string; passengerId: number; phase: "immigration" | "security" | "queue" | "ops"; title: string; detail: string; tone: ServiceEvent["tone"]; time: number };
 type Agent = {
@@ -22,6 +22,7 @@ type Agent = {
   exit: number; speed: number; time1: number; time2: number; remaining: number;
   fill: string; border: string; hatch: number; waitTime: number; patience: number;
   queueSequence: number | null;
+  walkFrom: number; walkProgress: number; walkDuration: number;
   immigrationEvent: ServiceEvent; securityEvent: ServiceEvent; currentEvent: ServiceEvent | null;
 };
 type WorkerChange = ReturnType<typeof workerShiftPlan>[number] & { grid: Grid };
@@ -101,7 +102,7 @@ function makeAgent(id: number, edges: [Edge[], Edge[]]): Agent {
     returning: false, attempt: 0, entries1, entries2, exit: entries1[0],
     speed: [2.7, 3.35, 4.1][travel], time1: [2.1, 3.1, 4.4][one], time2: [1.8, 2.7, 3.8][two], remaining: 0,
     fill: ["#52d6b1", "#f4c95d", "#f1766b"][travel], border: ["#71b7ff", "#b59cff", "#ff8f70"][one], hatch: two + 1,
-    waitTime: 0, patience: passengerPatience(id), queueSequence: null, immigrationEvent, securityEvent, currentEvent: null,
+    waitTime: 0, patience: passengerPatience(id), queueSequence: null, walkFrom: 0, walkProgress: 0, walkDuration: 0, immigrationEvent, securityEvent, currentEvent: null,
   };
 }
 
@@ -119,6 +120,11 @@ function move(agent: Agent, edges: [Edge[], Edge[]], closed: [number[], number[]
     const entries2 = [preferred, ...agent.entries2.filter((entry) => entry !== preferred)];
     const next = attemptRoute(1, entries2, 0, edges);
     return { agent: { ...agent, stage: "grid2" as Stage, route: next.route, routeIndex: 0, progress: 0, success: next.success, returning: false, attempt: 0, entries2, remaining: 0, waitTime: 0, currentEvent: null }, retry, cleared, failed, turnedAway, abandoned };
+  }
+  if (agent.stage === "walk1" || agent.stage === "walk2") {
+    const walkProgress = Math.min(agent.walkDuration, agent.walkProgress + DT);
+    if (walkProgress < agent.walkDuration) return { agent: { ...agent, walkProgress }, retry, cleared, failed, turnedAway, abandoned };
+    return { agent: { ...agent, stage: (agent.stage === "walk1" ? "queue1" : "queue2") as Stage, walkProgress, queueSequence: null, waitTime: 0 }, retry, cleared, failed, turnedAway, abandoned };
   }
   if (agent.stage === "queue1" || agent.stage === "queue2") {
     const waiting = { ...agent, waitTime: agent.waitTime + DT };
@@ -204,11 +210,14 @@ function tick(state: Sim, edges: [Edge[], Edge[]]): Sim {
     retries += result.retry; cleared += result.cleared; failed += result.failed; turnedAway += result.turnedAway; abandoned += result.abandoned;
     if (result.turnedAway) events.push({ id: `${elapsed}-${agent.id}-turned`, passengerId: agent.id, phase: "immigration", title: "Ingreso denegado", detail: agent.currentEvent?.detail ?? "No se pudo resolver un requisito obligatorio de ingreso.", tone: "alert", time: elapsed });
     if (result.abandoned) events.push({ id: `${elapsed}-${agent.id}-left`, passengerId: agent.id, phase: "queue", title: "Un pasajero abandonó la fila", detail: `Se agotó su paciencia después de ${Math.round(agent.waitTime)} segundos de espera en ${priorStage === "queue1" ? "migraciones" : "seguridad"}.`, tone: "alert", time: elapsed });
+    if ((priorStage === "walk1" || priorStage === "walk2") && (result.agent.stage === "queue1" || result.agent.stage === "queue2")) {
+      return { ...result.agent, queueSequence: nextQueueSequence++ };
+    }
     return result.agent;
   });
   ([1, 2] as const).forEach((phase) => {
     const choice = phase === 1 ? "choice1" : "choice2", queue = phase === 1 ? "queue1" : "queue2", grid: Grid = phase === 1 ? 0 : 1;
-    const waits = Array.from({ length: LANES }, (_, lane) => agents.filter((agent) => agent.stage === queue && agent.exit === lane).length);
+    const waits = Array.from({ length: LANES }, (_, lane) => agents.filter((agent) => (agent.stage === queue || agent.stage === (phase === 1 ? "walk1" : "walk2")) && agent.exit === lane).length);
     agents = agents.map((agent) => {
       if (agent.stage !== choice) return agent;
       const origin = agent.exit, lane = chooseLocalQueue({ origin, waits, closed: closed[grid] as number[], passengerId: agent.id, phase });
@@ -217,6 +226,7 @@ function tick(state: Sim, edges: [Edge[], Edge[]]): Sim {
         queueSwitches += 1;
         if (queueSwitches <= 4 || queueSwitches % 6 === 0) events.push({ id: `${elapsed}-${agent.id}-switch-${phase}`, passengerId: agent.id, phase: "queue", title: "Encontró una fila más corta", detail: `El pasajero ${String(agent.id + 1).padStart(2, "0")} exploró las filas cercanas hasta la primera más larga y eligió un módulo a ${Math.abs(lane - origin)} puesto${Math.abs(lane - origin) === 1 ? "" : "s"} de distancia.`, tone: "good", time: elapsed });
       } else queueStays += 1;
+      if (lane !== origin) return { ...agent, stage: (phase === 1 ? "walk1" : "walk2") as Stage, exit: lane, walkFrom: origin, walkProgress: 0, walkDuration: queueWalkDuration(origin, lane), waitTime: 0, queueSequence: null };
       return { ...agent, stage: queue as Stage, exit: lane, waitTime: 0, queueSequence: nextQueueSequence++ };
     });
   });
@@ -332,6 +342,10 @@ function Board({ edges, agents, selected, locked, elapsed, faults, onNode }: {
         const grid: Grid = agent.stage === "grid1" ? 0 : 1;
         const a = cellPoint(grid, agent.route[agent.routeIndex] ?? agent.route[0]), b = cellPoint(grid, agent.route[agent.routeIndex + 1] ?? agent.route[agent.routeIndex]);
         return { x: a.x + (b.x - a.x) * agent.progress, y: a.y + (b.y - a.y) * agent.progress };
+      }
+      if (agent.stage === "walk1" || agent.stage === "walk2") {
+        const interpolatedLane = queueWalkLane(agent.walkFrom, agent.exit, agent.walkProgress, agent.walkDuration);
+        return { x: laneX(0) + interpolatedLane * (laneX(1) - laneX(0)), y: agent.stage === "walk1" ? 691 : 101 };
       }
       const x = laneX(agent.exit);
       if (agent.stage === "choice1") return { x, y: 691 };
