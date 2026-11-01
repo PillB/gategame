@@ -182,3 +182,14 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
 .next-experiment{grid-column:1/-1;margin:0;padding:12px 14px;border:1px solid #526a6f;border-radius:8px;background:#263b40;color:#e1edf0;font-size:12px;line-height:1.5}
 .next-experiment strong{display:block;margin-bottom:4px;letter-spacing:.06em;font:700 11px var(--font-mono);color:#d6f49a}
 @media(max-width:720px){.challenge-ribbon{align-items:flex-start;flex-direction:column;gap:4px}.challenge-ribbon span{min-width:0}.next-experiment{padding:12px}}
+
+/* Score change is a learning signal, never an extra hidden reward. */
+.round-delta{margin:8px 0 0;padding:8px 10px;border-radius:7px;border:1px solid #526971;background:#23363b;color:#e2eef2;font-size:12px;line-height:1.5}
+.round-delta.improved{border-color:#b6dd62;color:#e5f8b6}
+.round-delta.lower{border-color:#d3a77a;color:#f1d5bb}
+.round-delta.tied{border-color:#647a85}
+@media(max-width:720px){
+  .top-actions button,.toolbar-controls button,.debrief-actions button,.run,.score-ledger summary{min-height:44px}
+  .score-ledger summary{display:flex;align-items:center}
+  .round-delta{font-size:13px}
+}
