@@ -421,7 +421,35 @@ function Board({ edges, agents, selected, locked, elapsed, faults, onNode }: {
     else return;
     event.preventDefault(); setCursor({ grid, node: `${x}:${y}` });
   }
-  return <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />;
+  const movePost = (dx: number, dy: number) => {
+    setCursor((previous) => {
+      const point = parseNode(previous.node);
+      const x = Math.max(0, Math.min(POST_COLS - 1, point.x + dx));
+      const y = Math.max(0, Math.min(POST_ROWS - 1, point.y + dy));
+      return { grid: previous.grid, node: `${x}:${y}` };
+    });
+  };
+  const point = parseNode(cursor.node);
+  return <>
+    <div className="mobile-post-controls" role="group" aria-label="Navegación precisa de postes">
+      <div className="mobile-post-control-heading">
+        <strong>CONTROL PRECISO DEL PLANO</strong>
+        <output aria-live="polite">Zona {cursor.grid === 0 ? "migraciones" : "seguridad"} · poste {cursor.node}</output>
+      </div>
+      <div className="mobile-post-dpad" role="group" aria-label="Mover el poste enfocado">
+        <button type="button" className="up" aria-label="Mover al poste de arriba" disabled={point.y === 0} onClick={() => movePost(0, -1)}>↑</button>
+        <button type="button" className="left" aria-label="Mover al poste de la izquierda" disabled={point.x === 0} onClick={() => movePost(-1, 0)}>←</button>
+        <button type="button" className="right" aria-label="Mover al poste de la derecha" disabled={point.x === POST_COLS - 1} onClick={() => movePost(1, 0)}>→</button>
+        <button type="button" className="down" aria-label="Mover al poste de abajo" disabled={point.y === POST_ROWS - 1} onClick={() => movePost(0, 1)}>↓</button>
+      </div>
+      <div className="mobile-post-actions">
+        <button type="button" aria-label="Cambiar zona del plano" onClick={() => setCursor((previous) => ({ ...previous, grid: previous.grid === 0 ? 1 : 0 }))}>Cambiar zona</button>
+        <button type="button" className="select-post" aria-label="Seleccionar poste enfocado" onClick={() => onNode(cursor.grid, cursor.node)}>{locked ? "Inspeccionar poste" : "Usar este poste"}</button>
+      </div>
+      <p>Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños.</p>
+    </div>
+    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
+  </>;
 }
 
 function safeRead(key: string) {
@@ -620,7 +648,7 @@ export default function Home() {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><span>GF</span><div><p>SIMULADOR AEROPORTUARIO / TURNO 04</p><h1>Gateflow</h1></div></div>
+      <div className="brand"><span>GF</span><div><p>SIMULADOR AEROPORTUARIO / {roundId === DEFAULT_ROUND ? "TURNO CLÁSICO" : round.title.toUpperCase()}</p><h1>Gateflow</h1></div></div>
       <div className="top-actions"><i className={sim.running ? "live" : ""}>{sim.running ? "● Turno en curso" : finished ? "● Turno terminado" : sim.elapsed ? "● Turno en pausa" : "● Modo edición"}</i><button onClick={reset}>Reiniciar turno</button></div>
     </header>
     <section className="hero">
@@ -638,7 +666,7 @@ export default function Home() {
         <div className="toolbar">
           <div><p className="label">PLANO EN VIVO · {fingerprint}</p><p aria-live="polite">{finished ? "Turno terminado. Revisa el resumen y ajusta una cinta o carga otro diseño." : message}</p></div>
           <div className="toolbar-controls">
-            <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={layoutLocked} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
+            <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={layoutLocked || sim.running} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
             <div className="pace" role="group" aria-label="Velocidad de simulación"><button aria-pressed={pace === 0.5} onClick={() => setPace(0.5)}>½ Lento</button><button aria-pressed={pace === 1} onClick={() => setPace(1)}>1× Normal</button><button aria-pressed={pace === 2} onClick={() => setPace(2)}>2× Rápido</button></div>
             <div className="presets" role="group" aria-label="Diseños predeterminados"><button disabled={layoutLocked} onClick={() => preset("guided")}>División guiada</button><button disabled={layoutLocked} onClick={() => preset("serpentine")}>Serpentina</button><button disabled={layoutLocked} onClick={() => preset("clear")}>Espacio libre</button></div>
           </div>
