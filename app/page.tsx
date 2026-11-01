@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { challengePrompt, createChallengeUrl, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
+import { challengePrompt, createChallengeUrl, createNativeShareData, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -562,6 +562,23 @@ export default function Home() {
     else { setShareFallback(card); setMessage("No se pudo acceder al portapapeles. Selecciona el desafío de abajo para copiarlo manualmente."); }
   }
 
+  async function shareScorecard() {
+    const link = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score);
+    const payload = createNativeShareData({ score, processed: sim.cleared, target: TARGET, url: link });
+    if (typeof navigator.share !== "function") { await copyScorecard(); return; }
+    try {
+      await navigator.share(payload);
+      setMessage("Compartiste un desafío que tus amigos pueden mejorar cambiando las cintas.");
+    } catch (error) {
+      // Cancel is an intentional user decision; never copy or contact anyone after cancellation.
+      if (error instanceof Error && error.name === "AbortError") {
+        setMessage("No se compartió el desafío. Puedes copiarlo cuando quieras.");
+        return;
+      }
+      await copyScorecard();
+    }
+  }
+
   return <main className="app-shell">
     <header className="topbar">
       <div className="brand"><span>GF</span><div><p>SIMULADOR AEROPORTUARIO / TURNO 04</p><h1>Gateflow</h1></div></div>
@@ -599,7 +616,7 @@ export default function Home() {
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
             {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {nextExperiment}</p>}
-            <div className="debrief-actions"><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
+            <div className="debrief-actions"><button onClick={shareScorecard}>Compartir reto</button><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}
           </section>}
         </div>
