@@ -24,6 +24,7 @@ The migration baseline was the Gateflow v5 Sites source at commit `8dbe2148b47d0
 | `npm test` | Test simulation, build the Cloudflare Worker, check its artifact and rendered page metadata |
 | `npm run build:pages` | Compile independent static assets into `dist/pages/` with project base `/gategame/` |
 | `npm run test:pages` | Build Pages and validate links, fonts, source revision, metadata, and assets |
+| `npm run test:visual-ticks` | In headless Chrome, stop the simulation clock and capture **every 0.1s tick** of R04 and R05 against a Node source-engine oracle; one board JPEG per tick (about 985 frames) plus NDJSON passenger/score ledgers (requires a completed Pages build) |
 | `npm run preview:pages` | Preview the Pages build locally; navigate to `/gategame/` |
 | `npm run build` | Run the bounded, Sites-specific Vinext Worker build with artifact validation |
 | `npm run validate:artifact` | Recheck the existing Worker artifact |

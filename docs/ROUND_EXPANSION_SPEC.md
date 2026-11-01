@@ -173,7 +173,7 @@ Asignar variante por participante, no por click/turno; mantener asignación cons
 | P0 | RND-00 Versión v5 congelada y comparación determinista | **No iniciado** | Tres mapas/semillas y ledger de score idénticos |
 | P0 | RND-01 Extraer `step()` puro conservando cola caminante y reservas existentes | **Parcial**: `walk1/walk2` y fixtures de ronda completa ya están en `main`; extracción pendiente | Tests por tick del motor extraído + sprites sin salto en navegador + 1×/2× iguales |
 | P0 | RND-02 Esquema `RoundDefinition`/validador | **Parcial**: catálogo `lib/rounds.js`, `waves-1`, 28 horarios, rechazo de links malversionados; motor general pendiente | Cargas válidas + rechazos seguros + reglas versionadas |
-| P1 | RND-03 R04/R05 oleadas, tutorial y predicción | **Candidato en draft**: UI con selector, pronóstico, landing feed, fixtures y desafíos versionados | Chrome/Pages screenshots + balance real + UAT |
+| P1 | RND-03 R04/R05 oleadas, tutorial y predicción | **Candidato en draft**: UI con selector, pronóstico, eventos, fixtures, desafíos versionados y tiempo puntuable ajustado al horario | Imagen por tick y traza en CI, balance humano + UAT |
 | P1 | RND-04 R10/R11 relevos y ritmo desigual | **Pendiente** | Aviso anticipado y fallbacks, solo una variable A/B |
 | P1 | RND-05 R16 inspecciones largas y ETA | **Pendiente** | Decisión observable; cero estado imposible |
 | P1 | RND-06 A/B de jugadores con consentimiento | **No iniciado** | Asignación, captura, preregistro y análisis válido |

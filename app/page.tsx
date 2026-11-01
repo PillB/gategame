@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeRound, parseChallengeScore } from "@/lib/challenges.js";
-import { arrivalAt, DEFAULT_ROUND, getRound, ROUNDS, upcomingWave } from "@/lib/rounds.js";
+import { arrivalAt, DEFAULT_ROUND, getRound, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -516,15 +516,16 @@ export default function Home() {
   const layoutLocked = sim.elapsed > 0 && !finished;
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
-  const scoreLedger = scoreShiftBreakdown({ processed: sim.cleared, elapsed: sim.elapsed, retries: sim.retries, target: TARGET, turnedAway: sim.turnedAway, abandoned: sim.abandoned, complete: finished, smartSwitches: sim.queueSwitches, repairs: sim.repairs, faultsLeft: unresolvedFaults.length });
+  const paceElapsed = scoredElapsed(roundId, sim.elapsed);
+  const scoreLedger = scoreShiftBreakdown({ processed: sim.cleared, elapsed: paceElapsed, retries: sim.retries, target: TARGET, turnedAway: sim.turnedAway, abandoned: sim.abandoned, complete: finished, smartSwitches: sim.queueSwitches, repairs: sim.repairs, faultsLeft: unresolvedFaults.length });
   const score = scoreLedger.total;
   const rank = rankShift(score);
-  const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: sim.elapsed, target: TARGET });
+  const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: paceElapsed, target: TARGET, paceIsNet: roundId !== DEFAULT_ROUND });
   const fingerprint = layoutFingerprint(edges);
   const roundDelta = finished && previousRun?.roundId === roundId ? describeRoundDelta(previousRun.score, score, previousRun.fingerprint === fingerprint) : null;
   const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
   const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
-  const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: sim.elapsed, queueSwitches: sim.queueSwitches, score }) : null;
+  const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: paceElapsed, queueSwitches: sim.queueSwitches, score }) : null;
   const flowMood = finished ? (score >= 850 ? "glow" : "settled") : queued <= 2 ? "calm" : queued <= 6 ? "steady" : "pressure";
   const flowLabel = finished ? (score >= 850 ? "FLUJO DOMINADO" : "TURNO FINALIZADO") : flowMood === "calm" ? "FLUJO TRANQUILO" : flowMood === "steady" ? "FLUJO ESTABLE" : "AUMENTA LA PRESIÓN";
   const isNewBest = finished && score > bestScore;
@@ -656,7 +657,7 @@ export default function Home() {
       <p>Conecta postes con cintas retráctiles para organizar dos filas del aeropuerto. Los pasajeros usan A* para avanzar por los <strong>espacios libres</strong> y luego pasan por entrevistas migratorias, nuevas revisiones de equipaje y controles de seguridad. Su paciencia tiene un límite.</p>
     </section>
     <section className="metrics" aria-label="Indicadores del turno">
-      <article><span>Tiempo</span><strong>{timeLabel(sim.elapsed)}</strong><small>meta ≤ 00:55</small></article>
+      <article><span>Tiempo real</span><strong>{timeLabel(sim.elapsed)}</strong><small>{roundId === DEFAULT_ROUND ? "meta ≤ 00:55" : `puntuable ${timeLabel(paceElapsed)} · meta ≤ 00:55`}</small></article>
       <article><span>Atendidos</span><strong>{sim.cleared}<em>/{TARGET}</em></strong><small>{active} en el sistema</small></article>
       <article><span>En fila</span><strong>{queued}</strong><small>{sim.queueSwitches} cambios de fila</small></article>
       <article className="score"><span>Puntuación</span><strong>{sim.elapsed ? score : "—"}</strong><small>{displayedBest ? `récord ${displayedBest}` : "/ 1000 puntos"}</small></article>
@@ -684,6 +685,7 @@ export default function Home() {
             <div className="debrief-copy"><p className="label">RESUMEN DE {round.title.toUpperCase()} · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD DE ESTA MISIÓN</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
+            {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}, pero la puntuación usa {timeLabel(paceElapsed)}: descontamos el desfase del último aterrizaje respecto al turno clásico. La espera impuesta por el horario no reduce tus puntos.</p>}
             {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {round.waves.length ? `${round.payoff} ${nextExperiment}` : nextExperiment}</p>}
             <div className="debrief-actions"><button onClick={shareScorecard}>Compartir reto</button><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}
@@ -701,7 +703,7 @@ export default function Home() {
           <div className="progress"><span style={{ width: `${resolved / TARGET * 100}%` }} /></div>
           <div className="outcomes"><span><b>{sim.cleared}</b> atendidos</span><span><b>{sim.turnedAway}</b> rechazados</span><span><b>{sim.abandoned}</b> se retiraron</span><span><b>{sim.failed}</b> varados</span></div>
           <div className="ops-counters"><span><b>{sim.queueSwitches}</b> cambios de fila</span><span><b>{sim.repairs}</b> cintas reparadas</span></div>
-          <div className="micro-goals"><span className={sim.cleared >= 24 ? "met" : ""}>24 atendidos</span><span className={finished && sim.abandoned === 0 ? "met" : ""}>sin abandonos</span><span className={finished && sim.retries === 0 ? "met" : ""}>sin reintentos</span><span className={finished && sim.elapsed <= 55 ? "met" : ""}>≤ 00:55</span></div>
+          <div className="micro-goals"><span className={sim.cleared >= 24 ? "met" : ""}>24 atendidos</span><span className={finished && sim.abandoned === 0 ? "met" : ""}>sin abandonos</span><span className={finished && sim.retries === 0 ? "met" : ""}>sin reintentos</span><span className={finished && paceElapsed <= 55 ? "met" : ""}>≤ 00:55 netos</span></div>
         </section>
         <section className="incident-feed" aria-live="polite">
           <header><p className="label">REGISTRO EN VIVO</p><span>{sim.events.length ? "ÚLTIMOS 3" : "EN ESPERA"}</span></header>

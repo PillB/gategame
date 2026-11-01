@@ -17,6 +17,7 @@
     "test:rounds": "node --test tests/round-experiments.test.mjs tests/round-delight.test.mjs tests/full-round.test.mjs",
     "compare:rounds": "node scripts/compare-rounds.mjs 128",
     "test:pages": "npm run build:pages && node --test tests/pages-artifact.test.mjs",
+    "test:visual-ticks": "node scripts/tick-visual-audit.mjs",
     "typecheck:pages": "tsc --noEmit --project tsconfig.pages.json",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",

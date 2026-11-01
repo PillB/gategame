@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { queueWalkLane, scoreShiftBreakdown, simulationInterval } from "../lib/simulation.js";
-import { ROUNDS, arrivalAt } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, scoredElapsed } from "../lib/rounds.js";
 
 // Compile the ACTUAL simulation functions from the shipped UI, not a second,
 // potentially divergent implementation. React is never mounted in this test.
@@ -40,6 +40,18 @@ const REPAIRED_BASELINES = Object.freeze({
   guided: { score: 1000, repairs: 2, elapsed: 42.9 },
   serpentine: { score: 946, repairs: 2, elapsed: 65.9 },
   "open-floor": { score: 933, repairs: 0, elapsed: 47.8 },
+});
+const MISSION_BASELINES = Object.freeze({
+  r04: {
+    guided: {elapsed:59.2,cleared:25,abandoned:0,score:856},
+    serpentine: {elapsed:75.1,cleared:25,abandoned:0,score:822},
+    "open-floor": {elapsed:59.5,cleared:25,abandoned:0,score:932},
+  },
+  r05: {
+    guided: {elapsed:39.3,cleared:25,abandoned:0,score:866},
+    serpentine: {elapsed:63.1,cleared:25,abandoned:0,score:782},
+    "open-floor": {elapsed:39.9,cleared:24,abandoned:1,score:810},
+  },
 });
 
 
@@ -106,7 +118,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
     if (!state.running) {
       assert.equal(state.spawned, TARGET, "Premature game completion");
       assert.equal(state.cleared + state.failed + state.turnedAway + state.abandoned, TARGET);
-      const score = scoreShiftBreakdown({processed:state.cleared,elapsed:state.elapsed,
+      const score = scoreShiftBreakdown({processed:state.cleared,elapsed:scoredElapsed(roundId, state.elapsed),
         retries:state.retries,target:TARGET,turnedAway:state.turnedAway,
         abandoned:state.abandoned,complete:true,smartSwitches:state.queueSwitches,
         repairs:state.repairs,faultsLeft:state.faults.filter(f=>!f.repaired).length});
@@ -184,6 +196,9 @@ test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layo
       assert.equal(first.score, second.score);
       assert.ok(first.state.elapsed >= round.arrivals.at(-1));
       assert.equal(first.state.cleared + first.state.failed + first.state.turnedAway + first.state.abandoned, TARGET);
+      assert.deepEqual({elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,
+        abandoned:first.state.abandoned,score:first.score},MISSION_BASELINES[round.id][name],
+        `Balance regression must update the explicit ${round.id}/${name} snapshot`);
       console.info("GATEFLOW_NEW_ROUND "+JSON.stringify({round:round.id,preset:name,
         elapsed:+first.state.elapsed.toFixed(1),cleared:first.state.cleared,abandoned:first.state.abandoned,
         score:first.score,walking:first.walkingSeen}));

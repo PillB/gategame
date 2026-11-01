@@ -100,6 +100,6 @@ No asignar «ganó A/B» hasta tener consentimiento, participantes y resultados 
 
 ## Semáforo del corte actual
 
-- **Implementado en draft**: R04 y R05 con horario anunciado, landing feed, selector accesible, score/record separado por misión, URL con `round`+`rules`, tests de llegada/conservación/replay/compartir.
+- **Implementado en draft**: R04 y R05 con horario anunciado, registro de aterrizajes, selector accesible, score/récord separado por misión, URL con `round`+`rules`, tests de llegada/conservación/replay/compartir. El reloj de puntuación ahora descuenta solamente el desfase del **último** vuelo frente al horario clásico (manteniendo el tiempo real a la vista); ver prueba de regresión de los seis mapas.
 - **Diseñado, no jugable**: R06–R39 y M03–M24. Las historias anteriores no deben aparecer como niveles desbloqueados.
-- **Falta**: screenshots y experiencia real de los dos niveles en Chrome/Pages (la rama aún no está desplegada), prueba móvil y accesibilidad, ensayo humano, evaluación de ajuste de score contra diferentes ventanas de llegadas, decisión del dueño.
+- **Falta**: auditar el nuevo capture-per-tick en Chrome de CI (un JPEG y una fila NDJSON por 0,1 s para R04/R05), inspección visual de las capturas, prueba física móvil y accesibilidad, ensayo humano, calibración subjetiva del score neto frente a distintos horarios, decisión del dueño.

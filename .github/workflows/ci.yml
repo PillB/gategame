@@ -44,6 +44,9 @@ jobs:
         run: npm run test:pages
       - name: Chrome browser gameplay and mobile smoke
         run: node scripts/browser-smoke.mjs
+      - name: Per-tick Chrome screenshot and state parity audit (R04/R05)
+        if: github.event_name == 'pull_request'
+        run: node scripts/tick-visual-audit.mjs
       - name: Upload browser QA screenshots
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4/v6 pinned
@@ -52,3 +55,11 @@ jobs:
           path: evidence/browser/*.png
           if-no-files-found: warn
           retention-days: 7
+      - name: Upload 0.1-second screenshot ledger
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4/v6 pinned
+        with:
+          name: gateflow-tick-audit-${{ github.sha }}
+          path: evidence/tick-audit/**
+          if-no-files-found: warn
+          retention-days: 3

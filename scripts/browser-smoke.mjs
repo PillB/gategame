@@ -53,7 +53,7 @@ async function screenshot(name){
   const image=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:true});
   await writeFile(path.join(evidence,name+".png"),Buffer.from(image.data,"base64"));
 }
-async function fullRound(preset,name,expectedCleared=25){
+async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
   await clickButton(preset);
   await clickButton("2× Rápido");
   assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes('2× Rápido')"),true);
@@ -69,6 +69,7 @@ async function fullRound(preset,name,expectedCleared=25){
   }
   const data=await evaluate("(()=>({score:Number(document.querySelector('.debrief-copy strong')?.textContent),cleared:document.querySelector('.debrief-copy')?.textContent,layout:document.querySelector('.toolbar .label')?.textContent}))()");
   assert.ok(Number.isInteger(data.score)&&data.score>=0&&data.score<=1000,JSON.stringify(data));
+  if(expectedScore!==null)assert.equal(data.score,expectedScore,`Score changed in ${name} without reviewed baseline update`);
   assert.match(data.cleared,new RegExp(expectedCleared+"/28"),"Passenger count unexpected");
   const delta=await evaluate("document.querySelector('.round-delta')?.textContent||''");
   if(name==="02-guided")assert.equal(delta,"","First result has no previous-round comparison");
@@ -155,10 +156,10 @@ try{
   await clickButton("R04 · Las maletas cantoras");
   assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')"),true);
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
-  await fullRound("División guiada","08-r04");
+  await fullRound("División guiada","08-r04",25,856);
   await clickButton("R05 · Dos vuelos, una pista");
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),2);
-  await fullRound("Espacio libre","09-r05",24);
+  await fullRound("Espacio libre","09-r05",24,810);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");

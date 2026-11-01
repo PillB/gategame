@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ROUNDS, arrivalAt, getRound, upcomingWave } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, getRound, scoredElapsed, upcomingWave } from "../lib/rounds.js";
 
 const document = readFileSync(new URL("../docs/DELIGHT_LEDGER.md", import.meta.url), "utf8");
 
@@ -52,5 +52,28 @@ test("arrival scenes are honest: count, timestamp, order and versioned mission I
       i+=wave.count;
     }
     assert.equal(i,28);
+  }
+});
+
+test("scheduled idle gaps do not silently penalize mission pace scoring", () => {
+  assert.equal(scoredElapsed("classic", 42.9), 42.9);
+  const r04Offset = arrivalAt("r04",27)-arrivalAt("classic",27);
+  const r05Offset = arrivalAt("r05",27)-arrivalAt("classic",27);
+  assert.ok(r04Offset>15 && r05Offset<0,"Missions must actually differ in arrival cadence");
+  assert.ok(Math.abs(scoredElapsed("r04",59.2)-(59.2-r04Offset))<1e-9);
+  assert.ok(Math.abs(scoredElapsed("r05",39.3)-(39.3-r05Offset))<1e-9);
+  assert.ok(scoredElapsed("r04",5)>=0,"Pre-arrival time can never create negative score time");
+  assert.throws(()=>scoredElapsed("r04",-1),/inválido/i);
+});
+
+test("new mission labels and messages remain in Spanish and accessible without color or audio", () => {
+  for (const round of ROUNDS.filter((item)=>item.id!=="classic")) {
+    const messages = [round.title,round.badge,round.story,round.decision,round.payoff,
+      ...round.waves.flatMap((wave)=>[wave.label,wave.surprise])];
+    for (const message of messages) {
+      assert.doesNotMatch(message,/\b(flight|round|queue|next|start|finish|waiting|score)\b/i);
+      assert.ok(/[\p{L}]/u.test(message),`Message is icon-only: ${message}`);
+      assert.ok(message.length >= 10,`Uninformative mission cue: ${message}`);
+    }
   }
 });
