@@ -71,7 +71,13 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
   assert.ok(Number.isInteger(data.score)&&data.score>=0&&data.score<=1000,JSON.stringify(data));
   if(expectedScore!==null)assert.equal(data.score,expectedScore,`Score changed in ${name} without reviewed baseline update`);
   assert.match(data.cleared,new RegExp(expectedCleared+"/28"),"Passenger count unexpected");
+  const feed=await evaluate("[...document.querySelectorAll('.incident-feed ol > li')].map(x=>x.textContent.slice(0,120))");
+  assert.ok(feed.length<=3,`The feed promises the latest three events, but ${name} left ${feed.length} DOM rows: ${JSON.stringify(feed)}`);
   const delta=await evaluate("document.querySelector('.round-delta')?.textContent||''");
+  if(name==="08-r04")assert.match(await evaluate("document.querySelector('.next-experiment')?.textContent||''"),
+    /Restamos 15[,.]48 s.*aterrizó más tarde/i,"R04 must explain its 15.48-second scoring subtraction");
+  if(name==="09-r05")assert.match(await evaluate("document.querySelector('.next-experiment')?.textContent||''"),
+    /Sumamos 6[,.]28 s.*aterrizó antes/i,"R05 must explain why scoring adds 6.28 seconds");
   if(name==="02-guided")assert.equal(delta,"","First result has no previous-round comparison");
   if(name==="04-serpentine")assert.match(delta,/72 puntos menos/,"Second round must compare to Guided 868");
   if(name==="05-open-floor")assert.match(delta,/Mejoraste 137 puntos/,"Third round must compare to Serpentine 796");

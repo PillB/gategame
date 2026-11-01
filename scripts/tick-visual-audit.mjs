@@ -62,6 +62,7 @@ const clockSource = `(() => {
       return { time: metrics[0], cleared: parseInt(metrics[1], 10), queued: Number(metrics[2]),
         score: Number(metrics[3]), active: Number(document.querySelector('.metrics article:nth-child(2) small')?.textContent.match(/\\d+/)?.[0]),
         remaining: Number(document.querySelector('.objective>strong')?.textContent),
+        feed: document.querySelectorAll('.incident-feed ol > li').length,
         finished: Boolean(document.querySelector('section.debrief')) };
     },
     canvasRect: () => {
@@ -109,6 +110,7 @@ function expectedMetrics(sim, roundId) {
       complete:finished,smartSwitches:sim.queueSwitches,repairs:sim.repairs,
       faultsLeft:sim.faults.filter((f)=>!f.repaired).length}).total,
     active: sim.agents.filter((a)=>!terminal.has(a.stage)).length,
+    feed: Math.min(3,sim.events.length),
     remaining: TARGET - resolved, finished };
 }
 
@@ -140,6 +142,8 @@ async function audit({ roundId, button, expectedScore, expectedElapsed }, url) {
     const ui = await evaluate("window.__gateflowAudit.step()");
     const expected = expectedMetrics(sim, roundId);
     assert.deepEqual(ui, expected, `Visual/engine divergence ${roundId} tick ${i+1}`);
+    assert.equal(new Set(sim.events.map((event)=>event.id)).size,sim.events.length,
+      `${roundId} duplicated incident ID at tick ${i+1}`);
     assert.equal(sim.spawned, sim.agents.length);
     assert.equal(sim.spawned, expected.active + sim.cleared + sim.failed + sim.turnedAway + sim.abandoned);
     const resolved=TARGET-expected.remaining;
@@ -162,7 +166,10 @@ async function audit({ roundId, button, expectedScore, expectedElapsed }, url) {
       allPending,
       cleared:sim.cleared,turnedAway:sim.turnedAway,abandoned:sim.abandoned,failed:sim.failed,
       queued:expected.queued,retries:sim.retries,switches:sim.queueSwitches,repairs:sim.repairs,
-      score:expected.score,scoring,phases,frameSha256:image}));
+      score:expected.score,scoring,phases,feed:expected.feed,
+      events:sim.events.map((event)=>({id:event.id,title:event.title})),frameSha256:image}));
+    if ((i+1) % 100 === 0) console.info("TICK_VISUAL_PROGRESS "+JSON.stringify({roundId,tick:i+1,
+      spawned:sim.spawned,active:expected.active,resolved,remaining:expected.remaining,score:expected.score}));
     if (!sim.running) break;
   }
   assert.equal(sim.running,false,`${roundId} did not finish within ${maxTicks*DT}s`);

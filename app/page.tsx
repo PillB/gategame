@@ -202,10 +202,18 @@ function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim
     return { ...fault, repaired: true };
   });
   const liveEdges = effectiveEdges(edges, faults), closed: [number[], number[]] = [closedLanes(elapsed, 0), closedLanes(elapsed, 1)], rates = dynamicRates(elapsed);
-  for (const wave of getRound(roundId).waves) if (state.elapsed < wave.at + DT / 2 && elapsed >= wave.at) {
+  // One landing announcement per *integer tick*. An elapsed-time tolerance
+  // previously straddled two ticks at 11/22/33s, producing duplicate event
+  // IDs, broken React keys and ghost rows under the "latest three" heading.
+  const currentTick = Math.round(elapsed / DT);
+  for (const wave of getRound(roundId).waves) if (currentTick === Math.max(1, Math.ceil(wave.at / DT - 1e-8))) {
     events.push({ id: `${roundId}-${wave.at}-landing`, passengerId: 0, phase: "ops", title: wave.surprise, detail: `${wave.label}: ${wave.count} pasajeros. El acceso que abriste decidirá por dónde caminan.`, tone: "good", time: elapsed });
   }
-  while (spawned < TARGET && elapsed >= nextSpawn) { agents.push(makeAgent(spawned, liveEdges)); spawned++; nextSpawn = arrivalAt(roundId, spawned) ?? Infinity; }
+  // Floating point accumulation can make the 11.0s tick evaluate as
+  // 10.9999999999 and delay a published landing by a full 0.1s frame.
+  // Keep the historical classic v5 timing and scores byte-for-byte intact.
+  const arrivalEpsilon = roundId === DEFAULT_ROUND ? 0 : 1e-9;
+  while (spawned < TARGET && elapsed + arrivalEpsilon >= nextSpawn) { agents.push(makeAgent(spawned, liveEdges)); spawned++; nextSpawn = arrivalAt(roundId, spawned) ?? Infinity; }
   let retries = state.retries, cleared = state.cleared, failed = state.failed, turnedAway = state.turnedAway, abandoned = state.abandoned;
   let queueSwitches = state.queueSwitches, queueStays = state.queueStays;
   let nextQueueSequence = state.nextQueueSequence;
@@ -521,6 +529,8 @@ export default function Home() {
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
   const paceElapsed = scoredElapsed(roundId, sim.elapsed);
+  const landingOffset = (arrivalAt(roundId, TARGET - 1) ?? 0) - (arrivalAt(DEFAULT_ROUND, TARGET - 1) ?? 0);
+  const landingOffsetLabel = Math.abs(landingOffset).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const scoreLedger = scoreShiftBreakdown({ processed: sim.cleared, elapsed: paceElapsed, retries: sim.retries, target: TARGET, turnedAway: sim.turnedAway, abandoned: sim.abandoned, complete: finished, smartSwitches: sim.queueSwitches, repairs: sim.repairs, faultsLeft: unresolvedFaults.length });
   const score = scoreLedger.total;
   const rank = rankShift(score);
@@ -691,7 +701,7 @@ export default function Home() {
             <div className="debrief-copy"><p className="label">RESUMEN DE {round.title.toUpperCase()} · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD DE ESTA MISIÓN</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
-            {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}, pero la puntuación usa {timeLabel(paceElapsed)}: descontamos el desfase del último aterrizaje respecto al turno clásico. La espera impuesta por el horario no reduce tus puntos.</p>}
+            {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}; para comparar con el clásico, puntuamos {timeLabel(paceElapsed)}. {landingOffset > 0 ? `Restamos ${landingOffsetLabel} s porque el último avión aterrizó más tarde que en el clásico.` : landingOffset < 0 ? `Sumamos ${landingOffsetLabel} s porque el último avión aterrizó antes que en el clásico.` : "Los últimos vuelos aterrizaron a la misma hora."} Así el último horario no añade ni quita ventaja artificial en el reloj.</p>}
             {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {round.waves.length ? `${round.payoff} ${nextExperiment}` : nextExperiment}</p>}
             <div className="debrief-actions"><button onClick={shareScorecard}>Compartir reto</button><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}

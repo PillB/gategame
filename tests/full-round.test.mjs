@@ -60,6 +60,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
   let walkingSeen = 0;
   let switchesInferred = 0;
   const landings = [];
+  const landingTimes = [];
   const announcements = new Set();
   for (let step = 0; step < maxTicks; step++) {
     if (flagFaults) state = { ...state, faults: state.faults.map(f => ({ ...f, flagged: true })) };
@@ -72,6 +73,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
       for (let i = previous.spawned; i < next.spawned; i++) {
         assert.ok(next.elapsed >= arrivalAt(roundId, i) - 1e-7, "Passenger arrived before the advertised flight");
         landings.push(i);
+        landingTimes.push(next.elapsed);
       }
     }
 
@@ -82,6 +84,8 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
     assert.ok(next.retries >= previous.retries && next.repairs >= previous.repairs);
     assert.ok(next.queueSwitches >= previous.queueSwitches);
     assert.ok(next.repairs <= next.faults.length, "Cannot repair more belts than fault events");
+    assert.equal(new Set(next.events.map((item)=>item.id)).size,next.events.length,
+      "Incident feed contains duplicate React keys (can leave ghost DOM events)");
 
     const ids = new Set();
     const busy = new Set();
@@ -123,7 +127,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
         abandoned:state.abandoned,complete:true,smartSwitches:state.queueSwitches,
         repairs:state.repairs,faultsLeft:state.faults.filter(f=>!f.repaired).length});
       assert.ok(score.total>=0 && score.total<=1000);
-      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, announcements: [...announcements] };
+      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, landingTimes, announcements: [...announcements] };
     }
   }
   assert.fail("Round did not resolve within "+(maxTicks*DT)+" simulated seconds");
@@ -191,6 +195,12 @@ test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layo
       const second = fullRound(layout, { roundId: round.id });
       assert.equal(JSON.stringify(first.state), JSON.stringify(second.state), `Replay diverged: ${round.id}/${name}`);
       assert.deepEqual(first.landings, Array.from({length:TARGET},(_,i)=>i));
+      let waveFirstIndex=0;
+      for (const wave of round.waves) {
+        assert.ok(Math.abs(first.landingTimes[waveFirstIndex]-Math.max(DT,wave.at))<1e-7,
+          `${round.id} landing ${wave.at}s delayed by floating-point accumulation`);
+        waveFirstIndex+=wave.count;
+      }
       assert.equal(first.announcements.length, round.waves.length, `Missing whimsical announcement: ${round.id}/${name}`);
       assert.ok(first.walkingSeen > 0, `Walking stages missing: ${round.id}/${name}`);
       assert.equal(first.score, second.score);
