@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { challengePrompt, createChallengeUrl, createNativeShareData, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
+import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeScore } from "@/lib/challenges.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -435,6 +435,7 @@ export default function Home() {
   const [message, setMessage] = useState("Las cintas impiden el paso; los pasajeros caminan por las celdas libres del corredor.");
   const [pace, setPace] = useState<0.5 | 1 | 2>(1);
   const [bestScore, setBestScore] = useState(0);
+  const [previousRun, setPreviousRun] = useState<{ score: number; fingerprint: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [shareFallback, setShareFallback] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] = useState<{ score: number; fingerprint: string } | null>(null);
@@ -485,6 +486,7 @@ export default function Home() {
   const rank = rankShift(score);
   const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: sim.elapsed, target: TARGET });
   const fingerprint = layoutFingerprint(edges);
+  const roundDelta = finished && previousRun ? describeRoundDelta(previousRun.score, score, previousRun.fingerprint === fingerprint) : null;
   const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
   const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
   const nextExperiment = finished ? nextRoundExperiment({ faultsLeft: unresolvedFaults.length, retries: sim.retries, abandoned: sim.abandoned, elapsed: sim.elapsed, queueSwitches: sim.queueSwitches, score }) : null;
@@ -546,19 +548,23 @@ export default function Home() {
   function commitBest() {
     if (finished && score > bestScore) { setBestScore(score); safeWrite("gateflow-best-v2", String(score)); }
   }
+  function captureFinishedRun() {
+    commitBest();
+    if (finished) setPreviousRun({ score, fingerprint });
+  }
   function run() {
     setSelected(null); setCopied(false); setShareFallback(null);
-    if (finished) { commitBest(); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
+    if (finished) { captureFinishedRun(); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
     setSim((state) => ({ ...state, running: !state.running }));
     setMessage(sim.running ? "Turno en pausa. El diseño sigue bloqueado para que la puntuación sea comparable." : sim.elapsed ? "Turno reanudado. El diseño sigue bloqueado." : "Turno iniciado. Los pasajeros pasan por los espacios libres, no por las cintas.");
   }
   function reset() {
-    commitBest(); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
+    captureFinishedRun(); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
     setMessage("Turno reiniciado. Tu diseño de cintas se conserva y se desbloquea.");
   }
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (layoutLocked) return;
-    commitBest(); setSim(blank()); setChallengeTarget(null);
+    captureFinishedRun(); setSim(blank()); setChallengeTarget(null);
     setEdges(mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []]);
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
@@ -626,7 +632,7 @@ export default function Home() {
           <span className={`flow-indicator ${flowMood}`} aria-live="polite"><i />{flowLabel}</span>
           {finished && <section className="debrief" aria-label="Resumen del turno">
             <div className="grade">{rank.grade}</div>
-            <div className="debrief-copy"><p className="label">RESUMEN DEL TURNO · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD PERSONAL</span>}</div>
+            <div className="debrief-copy"><p className="label">RESUMEN DEL TURNO · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD PERSONAL</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
             {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {nextExperiment}</p>}
