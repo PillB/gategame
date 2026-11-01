@@ -6,9 +6,9 @@ Status: Proposed design/measurement contract, **not** proof of player enjoyment 
 
 The existing core is **design → predict → run → observe → debrief → move one belt**. New features should reinforce agency and legibility, not create extra taps, artificial scarcity, addictive streaks, paid rewards, or forced contact-list access. A CHI 2024 preregistered study (n=1,699) found curiosity and legible success-dependent feedback important, while overamplified feedback may reduce agency: https://doi.org/10.1145/3613904.3642656 .
 
-**Implemented candidate:** after every finished round, show a single, measurable next experiment chosen from actual fault, route, abandonment, timing and switch counters. A shared URL stores the **exact belt layout** plus a score to beat (`?layout=G1...&beat=NNN`). On load, show the target only while its original layout fingerprint matches. On completion, display win, tie or loss using integer score difference; a tie is not a win. No account, opponent ID, player name or remote leaderboard needed.
+**Implemented candidate:** after every finished round, show a single, measurable next experiment chosen from actual fault, route, abandonment, timing and switch counters. A shared URL stores the **exact belt layout** plus a score to beat (`?layout=G1...&beat=NNN`). On load, preserve the starting map fingerprint and score target. **Let the recipient edit the map to beat the target**: replaying the unchanged deterministic layout can only tie. On completion, display win, tie or loss using integer score difference; a tie is not a win. Selecting an unrelated preset exits the challenge. No account, opponent ID, player name or remote leaderboard needed.
 
-**Fairness limitation:** the score is deterministic only with the same simulation implementation, fixed seed and game rules. A later balancing patch can change the outcome; until versioned rule sets are added, compare score-to-beat within the currently deployed build and disclose when rules change. Challenge links and cards do not prove anti-cheat identity, server verification or persistent leaderboards.
+**Fairness limitation:** the source code uses a fixed scenario and seeded rules; an unchanged layout must reproduce its score, so players must be allowed to edit belts to beat an opponent. The score is deterministic only with the same simulation implementation, fixed seed and game rules. A later balancing patch can change the outcome; until versioned rule sets are added, compare score-to-beat within the currently deployed build and disclose when rules change. Challenge links and cards do not prove anti-cheat identity, server verification or persistent leaderboards.
 
 ## Falsifiable acceptance and release gates
 
@@ -16,8 +16,8 @@ The existing core is **design → predict → run → observe → debrief → mo
 | --- | --- | --- | --- |
 | VIR-01 | Copy scorecard at end of a 947-point run | URL has valid `layout`, `beat=947`, no unrelated URL params or private identifiers; copied text includes same URL | Unit + browser paste |
 | VIR-02 | Open link in clean profile | Board fingerprint matches sender, challenge ribbon says 'Supera los 947 puntos' | Browser |
-| VIR-03 | Edit one belt after loading challenge | Challenge target becomes invalid/clearly disclaimed; not incorrectly claimed as comparable | Browser |
-| VIR-04 | Finish identical layout | 948 is a win (+1); 947 a tie; 946 a miss (−1) | Unit + browser |
+| VIR-03 | Edit one belt after loading challenge | Challenge remains active as an optimization challenge and says the design was adjusted; if an unrelated preset is selected, exit the challenge | Unit + browser |
+| VIR-04 | Finish unchanged layout, then improved layout | Unchanged deterministic replay ties at 947; edited layout can score 948 (win +1), 947 (tie), or 946 (miss −1) | Unit + browser |
 | VIR-05 | Corrupt `beat`: `1001`, `-1`, `01`, `Infinity`, `<img>` | No target accepted, layout may still load safely, no script injected | Unit + browser |
 | VIR-06 | Corrupt or oversized `layout` | Decoder fails closed, saved/default layout safe, no crash | Unit + browser |
 | FUN-01 | End with unresolved fault | One recommendation to flag early; no guaranteed points claim | Unit + browser |
