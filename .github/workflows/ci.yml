@@ -42,3 +42,13 @@ jobs:
         run: npm test
       - name: GitHub Pages build and artifact contract
         run: npm run test:pages
+      - name: Chrome browser gameplay and mobile smoke
+        run: node scripts/browser-smoke.mjs
+      - name: Upload browser QA screenshots
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4/v6 pinned
+        with:
+          name: gateflow-browser-${{ github.sha }}
+          path: evidence/browser/*.png
+          if-no-files-found: warn
+          retention-days: 7
