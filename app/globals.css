@@ -196,6 +196,9 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
 .flight-timeline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
 .flight-timeline span{border:1px solid #67867b;border-radius:5px;padding:3px 7px;color:#b5c9c1;font:600 10px var(--font-mono)}
 .flight-timeline span.landed{border-color:#d9ff5470;background:#d9ff541b;color:#e0ffb1}
+.breath-banner{display:flex;align-items:center;justify-content:space-between;gap:10px 22px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid #5a6897;background:#1a2034;color:#d7dff7;font-size:12px}
+.breath-banner strong{color:#c8d6ff;font:700 11px var(--font-mono);letter-spacing:.05em}
+.breath-banner span{max-width:690px;line-height:1.5}
 @media(max-width:720px){.round-picker{width:100%}.round-picker button{flex:1 1 130px;min-height:40px}.flight-board{grid-template-columns:1fr;padding:12px}.flight-board>small,.flight-timeline{grid-column:1}}
 /* Score change is a learning signal, never an extra hidden reward. */
 .round-delta{margin:8px 0 0;padding:8px 10px;border-radius:7px;border:1px solid #526971;background:#23363b;color:#e2eef2;font-size:12px;line-height:1.5}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeRound, parseChallengeScore } from "@/lib/challenges.js";
-import { arrivalAt, DEFAULT_ROUND, getRound, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
+import { arrivalAt, breathEditAvailable, DEFAULT_ROUND, getRound, paceClockCaption, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -29,7 +29,7 @@ type Agent = {
 type WorkerChange = ReturnType<typeof workerShiftPlan>[number] & { grid: Grid };
 type BeltFault = { id: string; grid: Grid; kind: "open" | "rotate-down"; original: Edge; applied: Edge | null; worker: string; flagged: boolean; repaired: boolean };
 type Purser = { x: number; direction: -1 | 1; state: "patrol" | "break" | "chat" };
-type Sim = { agents: Agent[]; events: DeskEvent[]; elapsed: number; spawned: number; cleared: number; failed: number; turnedAway: number; abandoned: number; retries: number; nextSpawn: number; nextQueueSequence: number; running: boolean; queueSwitches: number; queueStays: number; repairs: number; faults: BeltFault[]; faultedWorkers: string[] };
+type Sim = { agents: Agent[]; events: DeskEvent[]; elapsed: number; spawned: number; cleared: number; failed: number; turnedAway: number; abandoned: number; retries: number; nextSpawn: number; nextQueueSequence: number; running: boolean; queueSwitches: number; queueStays: number; repairs: number; breathEdits: number; faults: BeltFault[]; faultedWorkers: string[] };
 
 const beltRow = (row: number, gap: number) => Array.from({ length: POST_COLS - 1 }, (_, x) => ({ from: `${x}:${row}`, to: `${x + 1}:${row}` })).filter((_, x) => x !== gap);
 const GUIDED: [Edge[], Edge[]] = [
@@ -47,7 +47,7 @@ const WORKER_CHANGES: WorkerChange[] = [
   ...workerShiftPlan({ phase: 1, lanes: LANES, startAt: 14, cadence: 3.2 }).map((change) => ({ ...change, grid: 0 as Grid })),
   ...workerShiftPlan({ phase: 2, lanes: LANES, startAt: 22, cadence: 3.2 }).map((change) => ({ ...change, grid: 1 as Grid })),
 ];
-const blank = (): Sim => ({ agents: [], events: [], elapsed: 0, spawned: 0, cleared: 0, failed: 0, turnedAway: 0, abandoned: 0, retries: 0, nextSpawn: 0, nextQueueSequence: 0, running: false, queueSwitches: 0, queueStays: 0, repairs: 0, faults: [], faultedWorkers: [] });
+const blank = (): Sim => ({ agents: [], events: [], elapsed: 0, spawned: 0, cleared: 0, failed: 0, turnedAway: 0, abandoned: 0, retries: 0, nextSpawn: 0, nextQueueSequence: 0, running: false, queueSwitches: 0, queueStays: 0, repairs: 0, breathEdits: 0, faults: [], faultedWorkers: [] });
 
 const workerTimes = (worker: WorkerChange) => ({
   arrive: worker.startAt + worker.walkDuration,
@@ -206,6 +206,11 @@ function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim
   // previously straddled two ticks at 11/22/33s, producing duplicate event
   // IDs, broken React keys and ghost rows under the "latest three" heading.
   const currentTick = Math.round(elapsed / DT);
+  if (roundId === "r06" && currentTick === 140) {
+    events.push({ id: "r06-breath-open", passengerId: 0, phase: "ops",
+      title: "¡La fila toma aire! 📖", detail: "Tienes un pasaje de respiro: retira una cinta existente. Puedes pausar para elegir; el cambio no caduca.",
+      tone: "good", time: elapsed });
+  }
   for (const wave of getRound(roundId).waves) if (currentTick === Math.max(1, Math.ceil(wave.at / DT - 1e-8))) {
     events.push({ id: `${roundId}-${wave.at}-landing`, passengerId: 0, phase: "ops", title: wave.surprise, detail: `${wave.label}: ${wave.count} pasajeros. El acceso que abriste decidirá por dónde caminan.`, tone: "good", time: elapsed });
   }
@@ -251,7 +256,7 @@ function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim
   }
   events = events.slice(-8);
   const done = spawned === TARGET && cleared + failed + turnedAway + abandoned === TARGET;
-  return { agents, events, elapsed, spawned, cleared, failed, turnedAway, abandoned, retries, nextSpawn, nextQueueSequence, running: done ? false : state.running, queueSwitches, queueStays, repairs, faults, faultedWorkers };
+  return { agents, events, elapsed, spawned, cleared, failed, turnedAway, abandoned, retries, nextSpawn, nextQueueSequence, running: done ? false : state.running, queueSwitches, queueStays, repairs, breathEdits: state.breathEdits, faults, faultedWorkers };
 }
 
 function timeLabel(seconds: number) {
@@ -270,8 +275,8 @@ function cellPoint(grid: Grid, node: string) {
 }
 const laneX = (lane: number) => 81 + lane * 116;
 
-function Board({ edges, agents, selected, locked, elapsed, faults, onNode }: {
-  edges: [Edge[], Edge[]]; agents: Agent[]; selected: { grid: Grid; node: string } | null; locked: boolean; elapsed: number; faults: BeltFault[]; onNode: (grid: Grid, node: string) => void;
+function Board({ edges, agents, selected, locked, breathMode, elapsed, faults, onNode }: {
+  edges: [Edge[], Edge[]]; agents: Agent[]; selected: { grid: Grid; node: string } | null; locked: boolean; breathMode: boolean; elapsed: number; faults: BeltFault[]; onNode: (grid: Grid, node: string) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState<{ grid: Grid; node: string }>({ grid: 0, node: `0:${POST_ROWS - 1}` });
@@ -454,9 +459,9 @@ function Board({ edges, agents, selected, locked, elapsed, faults, onNode }: {
         <button type="button" aria-label="Cambiar zona del plano" onClick={() => setCursor((previous) => ({ ...previous, grid: previous.grid === 0 ? 1 : 0 }))}>Cambiar zona</button>
         <button type="button" className="select-post" aria-label="Seleccionar poste enfocado" onClick={() => onNode(cursor.grid, cursor.node)}>{locked ? "Inspeccionar poste" : "Usar este poste"}</button>
       </div>
-      <p>Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños.</p>
+      <p>{breathMode ? "Respiro: selecciona los extremos de una cinta existente para retirarla. Solo un cambio; no se pueden añadir cintas." : "Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños."}</p>
     </div>
-    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
+    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : breathMode ? "Respiro disponible: retira una sola cinta existente. Flechas y Enter para seleccionar postes." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
   </>;
 }
 
@@ -480,7 +485,9 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [shareFallback, setShareFallback] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] = useState<{ score: number; fingerprint: string } | null>(null);
+  const [startingLayout, setStartingLayout] = useState<[Edge[], Edge[]] | null>(null);
   const edgeRef = useRef(edges);
+  const breathSpentRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -525,7 +532,10 @@ export default function Home() {
   const queued = sim.agents.filter((agent) => agent.stage === "queue1" || agent.stage === "queue2").length;
   const resolved = sim.cleared + sim.failed + sim.turnedAway + sim.abandoned;
   const finished = sim.spawned === TARGET && resolved === TARGET;
-  const layoutLocked = sim.elapsed > 0 && !finished;
+  // Even before the first timer fires, do not permit a free midgame preset.
+  const gameLocked = (sim.elapsed > 0 || sim.running) && !finished;
+  const breathOpen = breathEditAvailable(roundId, sim.elapsed, sim.breathEdits, finished);
+  const layoutLocked = gameLocked && !breathOpen;
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
   const paceElapsed = scoredElapsed(roundId, sim.elapsed);
@@ -536,6 +546,8 @@ export default function Home() {
   const rank = rankShift(score);
   const medals = getShiftMedals({ processed: sim.cleared, abandoned: sim.abandoned, retries: sim.retries, elapsed: paceElapsed, target: TARGET, paceIsNet: roundId !== DEFAULT_ROUND });
   const fingerprint = layoutFingerprint(edges);
+  const sharedLayout = startingLayout && sim.breathEdits > 0 ? startingLayout : edges;
+  const shareFingerprint = layoutFingerprint(sharedLayout);
   const roundDelta = finished && previousRun?.roundId === roundId ? describeRoundDelta(previousRun.score, score, previousRun.fingerprint === fingerprint) : null;
   const challengeModified = challengeTarget !== null && challengeTarget.fingerprint !== fingerprint;
   const challengeNotice = challengeTarget ? challengePrompt(challengeTarget.score, challengeModified, finished ? score : null) : null;
@@ -566,16 +578,25 @@ export default function Home() {
   useEffect(() => { if (isNewBest) safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }, [isNewBest, score, roundId]);
 
   function selectNode(grid: Grid, node: string) {
-    if (layoutLocked) {
+    if (gameLocked) {
       if (!selected) { setSelected({ grid, node }); setMessage(`Inspección iniciada en el poste ${node} de ${grid ? "seguridad" : "migraciones"}. Selecciona el poste vecino.`); return; }
       if (selected.grid !== grid) { setSelected({ grid, node }); setMessage("Inspección trasladada a la otra zona."); return; }
       if (selected.node === node) { setSelected(null); setMessage("Inspección cancelada."); return; }
       const key = edgeKey(selected.node, node);
+      if (breathOpen && !breathSpentRef.current) {
+        const existing = edges[grid].findIndex((edge) => edgeKey(edge.from, edge.to) === key);
+        if (existing >= 0) {
+          breathSpentRef.current = true;
+          setEdges((current) => { const next: [Edge[], Edge[]] = [[...current[0]], [...current[1]]]; next[grid] = next[grid].filter((edge) => edgeKey(edge.from, edge.to) !== key); return next; });
+          setSim((state) => ({ ...state, breathEdits: state.breathEdits + 1 }));
+          setSelected(null); setMessage("¡Pasaje despejado! Retiraste tu única cinta de respiro. Los viajeros recalculan su ruta por el corredor libre."); return;
+        }
+      }
       const fault = sim.faults.find((item) => !item.repaired && item.grid === grid && (edgeKey(item.original.from, item.original.to) === key || (item.applied && edgeKey(item.applied.from, item.applied.to) === key)));
       if (fault) {
         setSim((state) => ({ ...state, faults: state.faults.map((item) => item.id === fault.id ? { ...item, flagged: true } : item) }));
         setMessage(fault.flagged ? "Esta falla ya está marcada. El supervisor la reparará cuando entre en su campo de visión." : "Falla marcada. El supervisor la reparará cuando entre en su campo de visión de 90°.");
-      } else setMessage("No hay fallas del personal en esa conexión. El diseño puntuado no cambia.");
+      } else setMessage(breathOpen ? "Durante el respiro solo puedes retirar una cinta existente; también puedes marcar fallas." : "No hay fallas del personal en esa conexión. El diseño puntuado no cambia.");
       setSelected(null); return;
     }
     if (!selected) { setSelected({ grid, node }); setMessage(`Poste ${node} de ${grid ? "seguridad" : "migraciones"} seleccionado.`); return; }
@@ -608,44 +629,45 @@ export default function Home() {
   }
   function run() {
     setSelected(null); setCopied(false); setShareFallback(null);
-    if (finished) { captureFinishedRun(); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
+    if (finished) { captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
+    if (sim.elapsed === 0) setStartingLayout([[...edges[0]], [...edges[1]]]);
     setSim((state) => ({ ...state, running: !state.running }));
     setMessage(sim.running ? "Turno en pausa. El diseño sigue bloqueado para que la puntuación sea comparable." : sim.elapsed ? "Turno reanudado. El diseño sigue bloqueado." : "Turno iniciado. Los pasajeros pasan por los espacios libres, no por las cintas.");
   }
   function reset() {
-    captureFinishedRun(); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
+    captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
     setMessage("Turno reiniciado. Tu diseño de cintas se conserva y se desbloquea.");
   }
   function preset(mode: "guided" | "serpentine" | "clear") {
-    if (layoutLocked) return;
-    captureFinishedRun(); setSim(blank()); setChallengeTarget(null);
+    if (gameLocked) return;
+    captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setChallengeTarget(null);
     setEdges(mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []]);
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
   }
   function selectRound(nextId: string) {
-    if (layoutLocked || nextId === roundId) return;
-    commitBest(); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
+    if (gameLocked || nextId === roundId) return;
+    commitBest(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
     const savedBest = Number(safeRead(nextId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${nextId}-waves-1`) ?? 0);
     setBestScore(Number.isFinite(savedBest) ? Math.max(0, Math.min(1000, savedBest)) : 0);
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Misión «${getRound(nextId).title}» lista. Mira el horario y prepara las cintas antes de empezar.`);
   }
   async function copyScorecard() {
-    const url = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score, roundId);
-    const card = createShareCard({ score, rank, processed: sim.cleared, target: TARGET, elapsed: sim.elapsed, abandoned: sim.abandoned, retries: sim.retries, fingerprint, url });
+    const url = createChallengeUrl(window.location.href, encodeLayout(sharedLayout, POST_COLS, POST_ROWS), score, roundId);
+    const card = createShareCard({ score, rank, processed: sim.cleared, target: TARGET, elapsed: sim.elapsed, abandoned: sim.abandoned, retries: sim.retries, fingerprint: shareFingerprint, url });
     let didCopy = false;
     try { await navigator.clipboard.writeText(card); didCopy = true; } catch {
       const field = document.createElement("textarea");
       field.value = card; field.setAttribute("readonly", ""); field.style.cssText = "position:fixed;left:-9999px;opacity:0";
       document.body.appendChild(field); field.select(); didCopy = document.execCommand("copy"); field.remove();
     }
-    if (didCopy) { setCopied(true); setShareFallback(null); setMessage("Desafío copiado con el diseño exacto de cintas para reproducirlo."); }
+    if (didCopy) { setCopied(true); setShareFallback(null); setMessage(sim.breathEdits ? "Desafío copiado con el plano inicial: tu amigo podrá elegir cuándo y qué cinta retirar durante su respiro." : "Desafío copiado con el diseño exacto de cintas para reproducirlo."); }
     else { setShareFallback(card); setMessage("No se pudo acceder al portapapeles. Selecciona el desafío de abajo para copiarlo manualmente."); }
   }
 
   async function shareScorecard() {
-    const link = createChallengeUrl(window.location.href, encodeLayout(edges, POST_COLS, POST_ROWS), score, roundId);
+    const link = createChallengeUrl(window.location.href, encodeLayout(sharedLayout, POST_COLS, POST_ROWS), score, roundId);
     const payload = createNativeShareData({ score, processed: sim.cleared, target: TARGET, url: link });
     if (typeof navigator.share !== "function") { await copyScorecard(); return; }
     try {
@@ -673,7 +695,7 @@ export default function Home() {
       <p>Conecta postes con cintas retráctiles para organizar dos filas del aeropuerto. Los pasajeros usan A* para avanzar por los <strong>espacios libres</strong> y luego pasan por entrevistas migratorias, nuevas revisiones de equipaje y controles de seguridad. Su paciencia tiene un límite.</p>
     </section>
     <section className="metrics" aria-label="Indicadores del turno">
-      <article><span>Tiempo real</span><strong>{timeLabel(sim.elapsed)}</strong><small>{roundId === DEFAULT_ROUND ? "meta ≤ 00:55" : `puntuable ${timeLabel(paceElapsed)} · meta ≤ 00:55`}</small></article>
+      <article><span>Tiempo real</span><strong>{timeLabel(sim.elapsed)}</strong><small>{paceClockCaption(roundId, sim.elapsed)}</small></article>
       <article><span>Atendidos</span><strong>{sim.cleared}<em>/{TARGET}</em></strong><small>{active} en el sistema</small></article>
       <article><span>En fila</span><strong>{queued}</strong><small>{sim.queueSwitches} cambios de fila</small></article>
       <article className="score"><span>Puntuación</span><strong>{sim.elapsed ? score : "—"}</strong><small>{displayedBest ? `récord ${displayedBest}` : "/ 1000 puntos"}</small></article>
@@ -683,17 +705,18 @@ export default function Home() {
         <div className="toolbar">
           <div><p className="label">PLANO EN VIVO · {fingerprint}</p><p aria-live="polite">{finished ? "Turno terminado. Revisa el resumen y ajusta una cinta o carga otro diseño." : message}</p></div>
           <div className="toolbar-controls">
-            <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={layoutLocked || sim.running} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
+            <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={gameLocked || sim.running} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
             <div className="pace" role="group" aria-label="Velocidad de simulación"><button aria-pressed={pace === 0.5} onClick={() => setPace(0.5)}>½ Lento</button><button aria-pressed={pace === 1} onClick={() => setPace(1)}>1× Normal</button><button aria-pressed={pace === 2} onClick={() => setPace(2)}>2× Rápido</button></div>
-            <div className="presets" role="group" aria-label="Diseños predeterminados"><button disabled={layoutLocked} onClick={() => preset("guided")}>División guiada</button><button disabled={layoutLocked} onClick={() => preset("serpentine")}>Serpentina</button><button disabled={layoutLocked} onClick={() => preset("clear")}>Espacio libre</button></div>
+            <div className="presets" role="group" aria-label="Diseños predeterminados"><button disabled={gameLocked} onClick={() => preset("guided")}>División guiada</button><button disabled={gameLocked} onClick={() => preset("serpentine")}>Serpentina</button><button disabled={gameLocked} onClick={() => preset("clear")}>Espacio libre</button></div>
           </div>
         </div>
         <div className="scenario-banner"><span>{round.badge}</span><b>{round.title} · {POST_COLS * POST_ROWS} postes por zona</b><small>{round.story} {round.decision}</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
         {round.waves.length > 0 && <div className="flight-board" role="status" aria-live="off"><strong>✈ TABLERO DE LLEGADAS</strong><span>{nextWave ? `${nextWave.label} · ${nextWave.count} viajeros en ${nextWaveSeconds} s` : `Todos los vuelos aterrizaron · ${sim.spawned}/${TARGET} viajeros en sala`}</span><small>{lastWave ? lastWave.surprise : round.payoff}</small><div className="flight-timeline" aria-label="Horarios de vuelos">{round.waves.map((wave) => <span key={wave.at} className={sim.elapsed >= wave.at ? "landed" : "upcoming"}>{timeLabel(wave.at)} · {wave.count}</span>)}</div></div>}
+        {roundId === "r06" && <div className="breath-banner" role="status"><strong>📖 PASAJE DE RESPIRO · {sim.breathEdits}/1 usado</strong><span>{sim.breathEdits ? "El corredor quedó abierto. Ya usaste tu único cambio en marcha." : sim.elapsed < 14 ? "Disponible desde 00:14: podrás retirar una cinta. No podrás añadir barreras." : finished ? "Turno cerrado; guardaste el cambio de respiro." : "¡Un cambio disponible! Pausa el turno cuando quieras y retira una cinta existente. No caduca."}</span></div>}
         {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
-          <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
+          <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} breathMode={breathOpen} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
           <span className="zone upper">ZONA B · SEGURIDAD</span><span className="zone lower">ZONA A · MIGRACIONES</span>
           <span className={`flow-indicator ${flowMood}`} aria-live="polite"><i />{flowLabel}</span>
           {finished && <section className="debrief" aria-label="Resumen del turno">
@@ -702,6 +725,7 @@ export default function Home() {
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
             {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}; para comparar con el clásico, puntuamos {timeLabel(paceElapsed)}. {landingOffset > 0 ? `Restamos ${landingOffsetLabel} s porque el último avión aterrizó más tarde que en el clásico.` : landingOffset < 0 ? `Sumamos ${landingOffsetLabel} s porque el último avión aterrizó antes que en el clásico.` : "Los últimos vuelos aterrizaron a la misma hora."} Así el último horario no añade ni quita ventaja artificial en el reloj.</p>}
+            {roundId === "r06" && sim.breathEdits > 0 && <p className="next-experiment"><strong>TU PASAJE DE RESPIRO</strong> Usaste 1 de 1 cambios para retirar una cinta mientras había viajeros en movimiento. El desafío compartido conserva tu plano <em>antes</em> del turno; cada amigo elige su propia cinta y el momento de abrirla.</p>}
             {nextExperiment && <p className="next-experiment"><strong>PRÓXIMA JUGADA</strong> {round.waves.length ? `${round.payoff} ${nextExperiment}` : nextExperiment}</p>}
             <div className="debrief-actions"><button onClick={shareScorecard}>Compartir reto</button><button onClick={copyScorecard}>{copied ? "✓ Desafío copiado" : "Copiar desafío"}</button><button className="tune" onClick={run}>Ajustar una cinta</button></div>
             {shareFallback && <textarea className="share-fallback" aria-label="Desafío para compartir" readOnly value={shareFallback} onFocus={(event) => event.currentTarget.select()} />}
