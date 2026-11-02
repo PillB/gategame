@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ROUNDS, arrivalAt, getRound, scoredElapsed, upcomingWave } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, getRound, paceClockCaption, scoredElapsed, upcomingWave } from "../lib/rounds.js";
 
 const document = readFileSync(new URL("../docs/DELIGHT_LEDGER.md", import.meta.url), "utf8");
 
@@ -32,7 +32,7 @@ test("all 36 future rounds include a distinct scene, meaningful intervention and
       assert.ok(text.length >= 25 && !/\b(TODO|TBD|pendiente)\b/i.test(text), `${id} missing ${name}`);
     }
   }
-  assert.deepEqual(ROUNDS.filter((item)=>item.id!=="classic").map((item)=>item.id.toUpperCase()),["R04","R05"]);
+  assert.deepEqual(ROUNDS.filter((item)=>item.id!=="classic").map((item)=>item.id.toUpperCase()),["R04","R05","R06"]);
 });
 
 test("arrival scenes are honest: count, timestamp, order and versioned mission IDs", () => {
@@ -64,6 +64,12 @@ test("scheduled idle gaps do not silently penalize mission pace scoring", () => 
   assert.ok(Math.abs(scoredElapsed("r05",39.3)-(39.3-r05Offset))<1e-9);
   assert.ok(scoredElapsed("r04",5)>=0,"Pre-arrival time can never create negative score time");
   assert.throws(()=>scoredElapsed("r04",-1),/inválido/i);
+  assert.match(paceClockCaption("r05",0),/ajuste \+6[,.]28 s.*meta/,
+    "A pre-start scoring offset must not pretend six seconds have elapsed");
+  assert.match(paceClockCaption("r04",0),/ajuste −15[,.]48 s.*meta/);
+  assert.match(paceClockCaption("r05",0.1),/puntuable 00:06.*meta/);
+  assert.equal(paceClockCaption("classic",0),"meta ≤ 00:55");
+  assert.match(paceClockCaption("r06",0),/ajuste −16[,.]48 s/);
 });
 
 test("new mission labels and messages remain in Spanish and accessible without color or audio", () => {

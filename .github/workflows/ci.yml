@@ -16,7 +16,7 @@ jobs:
   checks:
     name: Static, simulation, Worker and Pages checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -44,7 +44,7 @@ jobs:
         run: npm run test:pages
       - name: Chrome browser gameplay and mobile smoke
         run: node scripts/browser-smoke.mjs
-      - name: Per-tick Chrome screenshot and state parity audit (R04/R05)
+      - name: Per-tick Chrome screenshot and state parity audit (R04/R05/R06 + live edit)
         if: github.event_name == 'pull_request'
         run: node scripts/tick-visual-audit.mjs
       - name: Upload browser QA screenshots

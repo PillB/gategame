@@ -162,10 +162,17 @@ try{
   await clickButton("R04 · Las maletas cantoras");
   assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')"),true);
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste −15[,.]48 s/);
   await fullRound("División guiada","08-r04",25,856);
   await clickButton("R05 · Dos vuelos, una pista");
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),2);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste \+6[,.]28 s/,
+    "R05 has not yet started; +6.28 is a rule adjustment, not elapsed time");
   await fullRound("Espacio libre","09-r05",24,810);
+  await clickButton("R06 · La fila que respira");
+  assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent"),/0\/1 usado.*Disponible desde 00:14/);
+  await fullRound("Serpentina","12-r06-no-breath",25,833);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");

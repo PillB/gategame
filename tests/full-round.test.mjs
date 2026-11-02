@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { queueWalkLane, scoreShiftBreakdown, simulationInterval } from "../lib/simulation.js";
-import { ROUNDS, arrivalAt, scoredElapsed } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, breathEditAvailable, scoredElapsed } from "../lib/rounds.js";
 
 // Compile the ACTUAL simulation functions from the shipped UI, not a second,
 // potentially divergent implementation. React is never mounted in this test.
@@ -52,22 +52,42 @@ const MISSION_BASELINES = Object.freeze({
     serpentine: {elapsed:63.1,cleared:25,abandoned:0,score:782},
     "open-floor": {elapsed:39.9,cleared:24,abandoned:1,score:810},
   },
+  r06: {
+    guided: {elapsed:57.7,cleared:25,abandoned:0,score:847},
+    serpentine: {elapsed:73.2,cleared:25,abandoned:0,score:833},
+    "open-floor": {elapsed:59.5,cleared:25,abandoned:0,score:929},
+  },
 });
 
 
-function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "classic" } = {}) {
+function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "classic", breathRemoval = null } = {}) {
   let state = { ...blank(), running: true };
+  const playedLayout = layout.map((group) => group.map((edge) => ({ ...edge })));
   let walkingSeen = 0;
   let switchesInferred = 0;
   const landings = [];
   const landingTimes = [];
   const announcements = new Set();
+  let breathAnnouncements = 0;
   for (let step = 0; step < maxTicks; step++) {
+    if (breathRemoval && breathEditAvailable(roundId, state.elapsed, state.breathEdits)) {
+      const { grid, from, to } = breathRemoval;
+      const existing = playedLayout[grid].findIndex((edge) =>
+        (edge.from === from && edge.to === to) || (edge.to === from && edge.from === to));
+      assert.ok(existing >= 0, "Breath removal must target a real belt");
+      playedLayout[grid].splice(existing, 1);
+      state = { ...state, breathEdits: state.breathEdits + 1 };
+    }
     if (flagFaults) state = { ...state, faults: state.faults.map(f => ({ ...f, flagged: true })) };
     const prior = new Map(state.agents.map(a => [a.id, a]));
     const previous = state;
-    const next = tick(state, layout, roundId);
+    const next = tick(state, playedLayout, roundId);
     for (const event of next.events) if (event.id.endsWith("-landing")) announcements.add(event.id);
+    if (next.events.some((event)=>event.id==="r06-breath-open") &&
+      !previous.events.some((event)=>event.id==="r06-breath-open")) {
+      breathAnnouncements++;
+      assert.equal(Math.round(next.elapsed / DT),140,"R06 respiro notice must arrive at 14.0s");
+    }
 
     if (next.spawned > previous.spawned) {
       for (let i = previous.spawned; i < next.spawned; i++) {
@@ -82,6 +102,8 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
       next.cleared + next.failed + next.turnedAway + next.abandoned, "Conservation at each step");
     assert.ok(next.spawned <= TARGET && next.spawned >= previous.spawned, "Spawn count monotonic");
     assert.ok(next.retries >= previous.retries && next.repairs >= previous.repairs);
+    assert.ok(next.breathEdits >= previous.breathEdits && next.breathEdits <= 1);
+    assert.equal(next.breathEdits > 0 && roundId !== "r06", false, "Other rounds cannot earn breath changes");
     assert.ok(next.queueSwitches >= previous.queueSwitches);
     assert.ok(next.repairs <= next.faults.length, "Cannot repair more belts than fault events");
     assert.equal(new Set(next.events.map((item)=>item.id)).size,next.events.length,
@@ -127,7 +149,7 @@ function fullRound(layout, { flagFaults = false, maxTicks = 2700, roundId = "cla
         abandoned:state.abandoned,complete:true,smartSwitches:state.queueSwitches,
         repairs:state.repairs,faultsLeft:state.faults.filter(f=>!f.repaired).length});
       assert.ok(score.total>=0 && score.total<=1000);
-      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, landingTimes, announcements: [...announcements] };
+      return { state, steps: step+1, walkingSeen, switchesInferred, score:score.total, landings, landingTimes, announcements: [...announcements], breathAnnouncements };
     }
   }
   assert.fail("Round did not resolve within "+(maxTicks*DT)+" simulated seconds");
@@ -184,7 +206,7 @@ test("faults flagged on detection never break conservation or deterministic comp
   }
 });
 
-test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layout variants", () => {
+test("R04/R05/R06 landings, whimsical announcements, conservation, replay and 3 layout variants", () => {
   for (const round of ROUNDS.filter((item) => item.id !== "classic")) {
     assert.equal(round.arrivals.length, TARGET);
     assert.equal(round.waves.reduce((sum, wave) => sum + wave.count, 0), TARGET);
@@ -202,6 +224,8 @@ test("R04/R05 landings, whimsical announcements, conservation, replay and 3 layo
         waveFirstIndex+=wave.count;
       }
       assert.equal(first.announcements.length, round.waves.length, `Missing whimsical announcement: ${round.id}/${name}`);
+      if (round.id === "r06") assert.equal(first.breathAnnouncements,1,
+        "R06 relief announcement must fire once and at the earned moment");
       assert.ok(first.walkingSeen > 0, `Walking stages missing: ${round.id}/${name}`);
       assert.equal(first.score, second.score);
       assert.ok(first.state.elapsed >= round.arrivals.at(-1));
@@ -249,4 +273,35 @@ test("arrival complication flips which starter layout performs better (non-cosme
   assert.equal(openAdvantageR04-openAdvantageR05,132);
   console.info("GATEFLOW_STRATEGY_CROSSOVER "+JSON.stringify({r04:{guided:r04Guided,open:r04Open},
     r05:{guided:r05Guided,open:r05Open},interaction:132}));
+});
+
+test("R06 one-time relief is optional, replayable, risky and can genuinely help", () => {
+  assert.equal(breathEditAvailable("r06",13.9,0),false);
+  assert.equal(breathEditAvailable("r06",14,0),true);
+  assert.equal(breathEditAvailable("r06",45,0),true,"No reaction-time penalty on the earned edit");
+  assert.equal(breathEditAvailable("r06",14,1),false);
+  assert.equal(breathEditAvailable("r06",14,0,true),false);
+  assert.equal(breathEditAvailable("r04",14,0),false);
+  const guided=fullRound(GUIDED,{roundId:"r06"});
+  const guidedChanges=GUIDED.flatMap((group,grid)=>group.map((edge)=>({
+    removed:`${grid}:${edge.from}>${edge.to}`,
+    result:fullRound(GUIDED,{roundId:"r06",breathRemoval:{grid,...edge}}),
+  })));
+  const serp=fullRound(SERPENTINE,{roundId:"r06"});
+  const serpChanges=SERPENTINE.flatMap((group,grid)=>group.map((edge)=>({
+    removed:`${grid}:${edge.from}>${edge.to}`,
+    result:fullRound(SERPENTINE,{roundId:"r06",breathRemoval:{grid,...edge}}),
+  })));
+  assert.ok(guidedChanges.every((change)=>change.result.state.breathEdits===1));
+  assert.ok(guidedChanges.some((change)=>change.result.score!==guided.score));
+  assert.ok(serpChanges.some((change)=>change.result.score>=serp.score+10),"No useful R06 move");
+  assert.ok(serpChanges.some((change)=>change.result.score<=serp.score-10),"No risk/tradeoff");
+  assert.equal(serpChanges.find((change)=>change.removed==="1:4:9>5:9")?.result.score,852,
+    "Browser belt-removal fixture must remain helpful");
+  const action={roundId:"r06",breathRemoval:{grid:1,from:"4:9",to:"5:9"}};
+  assert.equal(JSON.stringify(fullRound(SERPENTINE,action).state),JSON.stringify(fullRound(SERPENTINE,action).state),
+    "Identical edit and tick must produce identical state");
+  console.info("GATEFLOW_BREATH_CAUSAL "+JSON.stringify({guided:guided.score,
+    serpentine:serp.score,highest:Math.max(...serpChanges.map(x=>x.result.score)),
+    lowest:Math.min(...serpChanges.map(x=>x.result.score)),helpfulBelt:"SEG 4:9>5:9"}));
 });
