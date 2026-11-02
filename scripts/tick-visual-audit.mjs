@@ -149,7 +149,8 @@ async function audit({ roundId, button, preset, layout:sourceLayout, breathRemov
   const rows = [], hashes = new Set();
   const maxTicks = 1800;
   for (let i=0; i<maxTicks; i++) {
-    if (breathRemoval && i===145) {
+    // Match the pure-engine action at exactly the first eligible 14.0s tick.
+    if (breathRemoval && i===140) {
       assert.equal(await evaluate("document.querySelector('.breath-banner')?.textContent.includes('Un cambio disponible')"),true,
         "One-time passage must be announced before use");
       assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
