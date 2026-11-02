@@ -236,6 +236,12 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
 /* Small-window directional controls: avoid the 138px D-pad + 125px actions
    overflowing a 280px folded/zoomed viewport. Keep 44px minimum targets. */
 @media(max-width:340px){
+  .top-actions{flex-wrap:wrap}
+  .top-actions i{min-width:0;max-width:100%;white-space:normal}
+  .top-actions button{min-width:0;white-space:normal;flex:1 1 auto}
+  .metrics article{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:10px;min-width:0}
+  .metrics strong{font-size:20px}
+  .metrics small,.toolbar .label,.debrief-copy .label{overflow-wrap:anywhere;min-width:0}
   .mobile-post-controls{grid-template-columns:minmax(0,1fr)}
   .mobile-post-dpad{grid-column:1;justify-content:center}
   .mobile-post-actions{grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
