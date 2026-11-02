@@ -579,7 +579,7 @@ export default function Home() {
 
   function selectNode(grid: Grid, node: string) {
     if (gameLocked) {
-      if (!selected) { setSelected({ grid, node }); setMessage(`Inspección iniciada en el poste ${node} de ${grid ? "seguridad" : "migraciones"}. Selecciona el poste vecino.`); return; }
+      if (!selected) { setSelected({ grid, node }); setMessage(breathOpen ? `Respiro: poste ${node} de ${grid ? "seguridad" : "migraciones"} seleccionado. Elige el otro extremo de una cinta existente para retirarla.` : `Inspección iniciada en el poste ${node} de ${grid ? "seguridad" : "migraciones"}. Selecciona el poste vecino.`); return; }
       if (selected.grid !== grid) { setSelected({ grid, node }); setMessage("Inspección trasladada a la otra zona."); return; }
       if (selected.node === node) { setSelected(null); setMessage("Inspección cancelada."); return; }
       const key = edgeKey(selected.node, node);
@@ -632,7 +632,7 @@ export default function Home() {
     if (finished) { captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
     if (sim.elapsed === 0) setStartingLayout([[...edges[0]], [...edges[1]]]);
     setSim((state) => ({ ...state, running: !state.running }));
-    setMessage(sim.running ? "Turno en pausa. El diseño sigue bloqueado para que la puntuación sea comparable." : sim.elapsed ? "Turno reanudado. El diseño sigue bloqueado." : "Turno iniciado. Los pasajeros pasan por los espacios libres, no por las cintas.");
+    setMessage(sim.running ? (breathOpen ? "Turno en pausa. Puedes retirar una cinta de respiro; los demás cambios de diseño siguen bloqueados." : "Turno en pausa. El diseño sigue bloqueado para que la puntuación sea comparable.") : sim.elapsed ? (breathOpen ? "Turno reanudado. Aún puedes retirar una cinta de respiro cuando quieras." : "Turno reanudado. El diseño sigue bloqueado.") : "Turno iniciado. Los pasajeros pasan por los espacios libres, no por las cintas.");
   }
   function reset() {
     captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
