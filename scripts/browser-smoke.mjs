@@ -173,6 +173,105 @@ try{
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
   assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent"),/0\/1 usado.*Disponible desde 00:14/);
   await fullRound("Serpentina","12-r06-no-breath",25,833);
+
+  // Responsive acceptance: one real game page, four selectable missions, 12
+  // reference device sizes, and three window/zoom modes. These CDP viewports
+  // are emulations: they do not certify real Safari, OS fullscreen, or pinch zoom.
+  const devices = [
+    {id:"iphone-x",width:375,height:812,touch:true},
+    {id:"iphone-13",width:390,height:844,touch:true},
+    {id:"iphone-max",width:430,height:932,touch:true},
+    {id:"pixel-7",width:412,height:915,touch:true},
+    {id:"galaxy-s22",width:360,height:780,touch:true},
+    {id:"galaxy-fold",width:280,height:653,touch:true},
+    {id:"ipad-mini",width:768,height:1024,touch:true},
+    {id:"ipad-air",width:820,height:1180,touch:true},
+    {id:"ipad-pro",width:1024,height:1366,touch:true},
+    {id:"laptop-13",width:1280,height:800,touch:false},
+    {id:"laptop-15",width:1440,height:900,touch:false},
+    {id:"desktop",width:1920,height:1080,touch:false},
+  ];
+  function modes(device) {
+    const zoom = device.width >= 768 ? 2 : 1.25;
+    return [
+      {id:"full-window",width:device.width,height:device.height},
+      {id:"windowed",width:Math.floor(device.width*.78),height:Math.floor(device.height*.75)},
+      {id:"zoom-equivalent",width:Math.floor(device.width/zoom),height:Math.floor(device.height/zoom)},
+      ...(device.touch ? [{id:"landscape",width:device.height,height:device.width}] : []),
+    ];
+  }
+  async function setViewport(device,mode) {
+    await send("Emulation.setDeviceMetricsOverride",{
+      width:mode.width,height:mode.height,deviceScaleFactor:device.touch ? 2:1,
+      mobile:device.touch,
+      screenWidth:mode.width,screenHeight:mode.height,
+    });
+    await sleep(100);
+  }
+  async function geometry(phase,id) {
+    const d=await evaluate("(()=>{"
+      +"const w=innerWidth,root=document.documentElement,detail=document.querySelector('.debrief'),"
+      +"map=document.querySelector('.canvas-wrap'),dpad=document.querySelector('.mobile-post-controls');"
+      +"const visible=e=>e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';"
+      +"const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}};"
+      +"const mobile=matchMedia('(max-width:720px)').matches;"
+      +"const actions=[...document.querySelectorAll('.top-actions button,.toolbar-controls button,.mobile-post-controls button,.debrief-actions button,.run,.score-ledger summary')].filter(visible);"
+      +"return {width:w,scrollWidth:root.scrollWidth,mobile,actions:actions.length,"
+      +"offscreen:actions.filter(e=>{const r=rect(e);return r.left< -3||r.right>w+3}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8),"
+      +"short:mobile?actions.filter(e=>{const r=rect(e);return r.width<43.5||r.height<43.5}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8):[],"
+      +"debrief:visible(detail)?rect(detail):null,map:visible(map)?rect(map):null,"
+      +"dpad:visible(dpad)?rect(dpad):null};})()");
+    assert.ok(d.width>0,id+" zero browser viewport");
+    assert.ok(d.scrollWidth<=d.width+3,id+" document horizontal overflow: "+JSON.stringify(d));
+    assert.deepEqual(d.offscreen,[],id+" actionable element beyond viewport: "+JSON.stringify(d));
+    assert.deepEqual(d.short,[],id+" undersized touch target: "+JSON.stringify(d));
+    if(phase==="debrief" && d.mobile) {
+      assert.ok(d.debrief&&d.debrief.left>=-2&&d.debrief.right<=d.width+2,
+        id+" mobile debrief offscreen "+JSON.stringify(d));
+    }
+    if(phase==="intro" && d.mobile) {
+      assert.ok(d.dpad && d.dpad.width<=d.width+2,
+        id+" missing or overflowing mobile precision controls "+JSON.stringify(d));
+    }
+    console.info("RESPONSIVE_MATRIX "+JSON.stringify({phase,id,...d}));
+  }
+  // Completed R06 debrief, including its actual score, must remain accessible
+  // before any subsequent mode or mission changes.
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    await geometry("debrief",id);
+    await screenshot("matrix-"+id+"-debrief");
+  }
+  await clickButton("Ajustar diseño");
+  const missionCases=[
+    ["Turno clásico","Turno clásico",0],
+    ["R04 · Las maletas cantoras","R04",4],
+    ["R05 · Dos vuelos, una pista","R05",2],
+    ["R06 · La fila que respira","R06",4],
+  ];
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    for(const [button,active,waves] of missionCases) {
+      await clickButton(button);
+      assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes("+JSON.stringify(active)+")"),true,id+" mission selection "+button);
+      assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),waves,id+" mission flight schedule "+button);
+      await geometry("intro",id+"-"+active);
+    }
+    assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent||''"),/0\/1 usado/,id+" R06 token missing");
+    await clickButton("Serpentina");
+    await clickButton("½ Lento");
+    assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes('½ Lento')"),true,id+" pace toggle");
+    await clickButton("Iniciar turno");
+    await clickButton("Pausar turno");
+    await clickButton("Reiniciar turno");
+    assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00",id+" reset");
+    await screenshot("matrix-"+id+"-intro");
+  }
+  console.info("RESPONSIVE_MATRIX_PASS devices="+devices.length+
+    " variants="+devices.reduce((n,d)=>n+modes(d).length,0)+
+    " mission_cases="+missionCases.length);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");
