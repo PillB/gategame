@@ -197,6 +197,7 @@ try{
       {id:"full-window",width:device.width,height:device.height},
       {id:"windowed",width:Math.floor(device.width*.78),height:Math.floor(device.height*.75)},
       {id:"zoom-equivalent",width:Math.floor(device.width/zoom),height:Math.floor(device.height/zoom)},
+      {id:"zoom-out-equivalent",width:Math.floor(device.width*1.25),height:Math.floor(device.height*1.25)},
       ...(device.touch ? [{id:"landscape",width:device.height,height:device.width}] : []),
     ];
   }
