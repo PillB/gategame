@@ -232,3 +232,18 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .mobile-post-actions .select-post{background:#d9ff54;color:#15201c;border-color:#d9ff54}
   .mobile-post-controls p{grid-column:1/-1;margin:0;font-size:11px;line-height:1.45;color:#d2e0e5}
 }
+
+/* Small-window directional controls: avoid the 138px D-pad + 125px actions
+   overflowing a 280px folded/zoomed viewport. Keep 44px minimum targets. */
+@media(max-width:340px){
+  .mobile-post-controls{grid-template-columns:minmax(0,1fr)}
+  .mobile-post-dpad{grid-column:1;justify-content:center}
+  .mobile-post-actions{grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+  .mobile-post-actions button{min-width:0;overflow-wrap:anywhere}
+  .mobile-post-control-heading{min-width:0}
+  .mobile-post-control-heading output{overflow-wrap:anywhere}
+  .debrief{grid-template-columns:minmax(0,1fr)}
+  .grade{width:56px;height:56px;font-size:31px}
+  .debrief-copy,.medals,.score-ledger,.next-experiment,.debrief-actions{min-width:0}
+  .medals{grid-template-columns:minmax(0,1fr)}
+}
