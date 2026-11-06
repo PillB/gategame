@@ -254,15 +254,17 @@ try {
   }).find(Boolean);
   if (!binary) throw Error("Headless Chrome is required for a genuine screenshot-per-tick audit");
   profile=await mkdtemp(path.join(tmpdir(),"gateflow-tick-"));
+  let chromeDiagnostics="";
   chrome=spawn(binary,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu",
     "--no-first-run","--disable-background-networking","--remote-allow-origins=*",
-    "--remote-debugging-port=0","--user-data-dir="+profile,"about:blank"],{stdio:"ignore"});
+    "--remote-debugging-port=0","--user-data-dir="+profile,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+  chrome.stderr?.on("data",(chunk)=>{chromeDiagnostics=(chromeDiagnostics+String(chunk)).slice(-6000);});
   let cdpPort=0;
-  for(let i=0;i<120;i++){
+  for(let i=0;i<400;i++){
     try {cdpPort=Number((await readFile(path.join(profile,"DevToolsActivePort"),"utf8")).split("\n")[0]);if(cdpPort>0)break;} catch {}
-    if(chrome.exitCode!==null)throw Error("Chrome exited early");await sleep(100);
+    if(chrome.exitCode!==null)throw Error("Chrome exited early. "+chromeDiagnostics);await sleep(100);
   }
-  if(!cdpPort)throw Error("Chrome debugging port not found");
+  if(!cdpPort)throw Error("Chrome debugging port not found after 40 seconds. "+chromeDiagnostics);
   const targets=await(await fetch("http://127.0.0.1:"+cdpPort+"/json")).json();
   socket=new WebSocket(targets.find((target)=>target.type==="page").webSocketDebuggerUrl);
   await new Promise((ok,fail)=>{socket.addEventListener("open",ok,{once:true});socket.addEventListener("error",fail,{once:true});});
