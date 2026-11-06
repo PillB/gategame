@@ -2,6 +2,31 @@
 
 **Scope:** Public temporary test repository `PillB/gategame`, distinct from the original private ChatGPT Site. This document supersedes obsolete historical rows in `QA_LEDGER.md`; original source comparator revision `8dbe2148b47d0d45aee5e5058f1717216d86608b`. A GitHub Actions success is evidence for the tested SHA, **not** blanket proof of a production URL or subjective enjoyment.
 
+**Reconciled 6 Nov 2026:** Current public `main` is the verified R04/R05 release `2607d878f203af0ae7c0c398ac6c12b6297f4d1c`: [CI 41273333201](https://github.com/PillB/gategame/actions/runs/41273333201) checked 985 per-tick Chrome screenshots and state/score records; [Pages 41273986873](https://github.com/PillB/gategame/actions/runs/41273986873) passed live SHA and asset checks. Original private Site unchanged. Older REL-09/REL-14 rows below are preserved historical status, not current truth. The next changes reside in **[draft PR #17](https://github.com/PillB/gategame/pull/17)** and have not been merged/deployed.
+
+## Independent visual audit and regression repairs — 6 Nov 2026
+
+- The **last verified successful** full R06 hosted candidate remains [CI 41532331569](https://github.com/PillB/gategame/actions/runs/41532331569): 12 device profiles, 57 window/zoom-equivalent/landscape combinations, 4 mission selections, 1,670 per-tick checks (R04 592 / 856, R05 393 / 866, R06 685 / 852). Later **code changes do not inherit that pass**.
+- Downloaded the original CI screenshot artifact and inspected iPhone, Pixel, Fold, iPad and laptop crops. **Visually reproduced a real clock overlap:** R06's `Tiempo real` caption and `00:00` overlap at 375–412px, and also on iPad mini 768px and laptop 1280px. Root cause: shared metrics card grid put the caption in column 2 beside an unconstrained time readout. Fixed card layout to stack label, clock and caption at all widths. Added DOM rectangle-intersection assertions per device/mode, not just root scrollWidth.
+- At the 226px Fold windowed emulation, the original 35px headline consumed disproportionate vertical space; reduced it at ≤300px. Added a debrief-scroll assertion requiring all three share/retry buttons to become visible at maximum internal scroll.
+- **Interaction audit:** screenshot showed the first `Iniciar turno` button below both tall map zones (several phone screens of scrolling). Added an above-map mobile start/pause/resume control, retained the original below-map control, and constrained the browser smoke to **visible** buttons. The game-loop scoring remains unchanged.
+- **Accessibility:** debrief is a named, keyboard-focusable region and receives focus when a turn ends, without claiming to be a modal dialog with unimplemented focus trapping. Native VoiceOver certification remains open.
+- **R06 physical belt:** an active worker fault can make a base belt invisible while it remains in the saved logical layout. The one-time respiro must not be spent on that already-open or rotated-away edge. The new helper compares base versus visually effective edges; explicit regression tests cover both fault kinds, reversed endpoints and non-existent links.
+- **CI infrastructure:** a 6 Nov runner Chrome startup failed before any gameplay assertion at its former 12-second CDP-port deadline. Increased the bounded startup to 40 seconds and preserved Chromium stderr for diagnosis. This failure does not establish a gameplay regression; **rerun required**.
+- **Release blockers:** Physical iPhone Safari/Android touch, VoiceOver/200% actual zoom and scroll, OS-native Web Share sheet and cancellation, uncoached 5–8-person pilot, independent review and reviewer/owner release acceptance. GitHub Actions viewport simulation is not evidence of those. PR #17 remains draft; no merge/deploy/private-Site change.
+
+## Active review ledger: PR #17 (not public Pages)
+
+| ID | User-facing change | Measured falsifier / evidence | Pending gate |
+| --- | --- | --- | --- |
+| REL-15 | R05 pre-start real clock `00:00` displays **ajuste +6,28 s**, not a fictional six played seconds; R04 labels `−15,48 s` | Pure Spanish copy regression, no score formula change | Hosted Chrome prestart assertion and screenshot |
+| REL-16 | R06 «La fila que respira»: 4×7 arrivals 0/7/27/34 s, a once-only optional belt removal earned at 14s, not time-limited, no midgame barrier insertion | Real engine all 3 layouts/0.1s conserved: Guided **847 / 57.7s**, Serpentine **833 / 73.2s**, Open Floor **929 / 59.5s**; each 25/28 cleared, no abandonment | Chrome D-pad edit and 0.1s screenshot parity; 390px and 200% zoom, human explanation |
+| REL-17 | A consequential, risky choice—not decorative animation | Under fixed Serpentine schedule and edit tick, score ranges **807–852** from base **833**. Removing SEG `4:9→5:9` gives **+19**; Guided removals mostly **0 to −3** | Human 5–8-player UAT: comprehends action/reward and wants to retry; no inferred fun/viral metrics |
+| REL-18 | Ethical challenge after live edit | Source preserves **starting** layout/fingerprint for copied challenge, recipient chooses own midgame edit | Chrome verifies `layout`, `round`, `rules`, `beat` and copied fingerprint; iPhone native sheet still open |
+| REL-19 | Independent screenshot QA | [CI 41532331569](https://github.com/PillB/gategame/actions/runs/41532331569) passed all 1,670 ticks; independent screenshots inspected on 2 Nov. Nov 6 subsequent fixes require a new SHA-matched run | **Nov 6 CI and independently checked visual artifacts pending; no silent publish** |
+
+This is a *candidate* rather than a claimed released win. No coercive streaks, spam, referral gates or analytics were added. No score is awarded merely for spending the token. The public mirror, private Site and repository visibility stay unchanged until separately authorized decisions.
+
 ## Source, implemented changes and evidence
 
 | ID | Area / owner | State | Evidence and next falsification |

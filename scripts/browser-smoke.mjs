@@ -45,7 +45,7 @@ async function waitFor(js,maxMs=17000){
   throw Error("Timed out waiting for "+js);
 }
 async function clickButton(label){
-  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+"));if(!b||b.disabled)return false;b.click();return true})()";
+  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+")&&x.getClientRects().length>0&&getComputedStyle(x).visibility!=='hidden');if(!b||b.disabled)return false;b.click();return true})()";
   assert.equal(await evaluate(js),true,"Button missing: "+label);
   await sleep(85);
 }
@@ -62,6 +62,10 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
   await screenshot(name+"-running");
   try {
     await waitFor("!!document.querySelector('section.debrief')",90000);
+    await waitFor("document.activeElement?.classList.contains('debrief')",3000);
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('role')"),"region",
+      "Debrief must be navigable as a named landmark without claiming an untrapped modal");
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
   } catch (error) {
     console.error("BROWSER_TIMEOUT_DIAGNOSTICS "+JSON.stringify(await evaluate("(()=>({time:document.querySelector('.metrics article:first-child strong')?.textContent,header:document.querySelector('.top-actions')?.textContent,objective:document.querySelector('.objective')?.textContent.slice(0,250),errors:document.querySelector('.toolbar')?.textContent.slice(0,160)}))()")));
     await screenshot(name+"-timeout");
@@ -87,17 +91,19 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
 }
 try{
   profile=await mkdtemp(path.join(tmpdir(),"gateflow-ci-"));
+  let chromeDiagnostics="";
   chrome=spawn(findChrome(),["--headless=new","--no-sandbox","--disable-dev-shm-usage",
     "--disable-gpu","--no-first-run","--disable-background-networking",
     "--remote-allow-origins=*","--remote-debugging-port=0",
-    "--user-data-dir="+profile,"about:blank"],{stdio:"ignore"});
+    "--user-data-dir="+profile,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+  chrome.stderr?.on("data",(chunk)=>{chromeDiagnostics=(chromeDiagnostics+String(chunk)).slice(-6000);});
   let port=0;
-  for(let i=0;i<120;i++){
+  for(let i=0;i<400;i++){
     try{port=Number((await readFile(path.join(profile,"DevToolsActivePort"),"utf8")).split("\n")[0]);if(port>0)break;}catch{}
-    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized");
+    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized. "+chromeDiagnostics);
     await sleep(100);
   }
-  if(!port)throw Error("CDP port not ready");
+  if(!port)throw Error("CDP port not ready after 40 seconds. "+chromeDiagnostics);
   const targets=await(await fetch("http://127.0.0.1:"+port+"/json")).json();
   const target=targets.find(t=>t.type==="page");
   assert.ok(target?.webSocketDebuggerUrl);
@@ -162,10 +168,128 @@ try{
   await clickButton("R04 · Las maletas cantoras");
   assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')"),true);
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste −15[,.]48 s/);
   await fullRound("División guiada","08-r04",25,856);
   await clickButton("R05 · Dos vuelos, una pista");
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),2);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste \+6[,.]28 s/,
+    "R05 has not yet started; +6.28 is a rule adjustment, not elapsed time");
   await fullRound("Espacio libre","09-r05",24,810);
+  await clickButton("R06 · La fila que respira");
+  assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent"),/0\/1 usado.*Disponible desde 00:14/);
+  await fullRound("Serpentina","12-r06-no-breath",25,833);
+
+  // Responsive acceptance: one real game page, four selectable missions, 12
+  // reference device sizes, and three window/zoom modes. These CDP viewports
+  // are emulations: they do not certify real Safari, OS fullscreen, or pinch zoom.
+  const devices = [
+    {id:"iphone-x",width:375,height:812,touch:true},
+    {id:"iphone-13",width:390,height:844,touch:true},
+    {id:"iphone-max",width:430,height:932,touch:true},
+    {id:"pixel-7",width:412,height:915,touch:true},
+    {id:"galaxy-s22",width:360,height:780,touch:true},
+    {id:"galaxy-fold",width:280,height:653,touch:true},
+    {id:"ipad-mini",width:768,height:1024,touch:true},
+    {id:"ipad-air",width:820,height:1180,touch:true},
+    {id:"ipad-pro",width:1024,height:1366,touch:true},
+    {id:"laptop-13",width:1280,height:800,touch:false},
+    {id:"laptop-15",width:1440,height:900,touch:false},
+    {id:"desktop",width:1920,height:1080,touch:false},
+  ];
+  function modes(device) {
+    const zoom = device.width >= 768 ? 2 : 1.25;
+    return [
+      {id:"full-window",width:device.width,height:device.height},
+      {id:"windowed",width:Math.floor(device.width*.78),height:Math.floor(device.height*.75)},
+      {id:"zoom-equivalent",width:Math.floor(device.width/zoom),height:Math.floor(device.height/zoom)},
+      {id:"zoom-out-equivalent",width:Math.floor(device.width*1.25),height:Math.floor(device.height*1.25)},
+      ...(device.touch ? [{id:"landscape",width:device.height,height:device.width}] : []),
+    ];
+  }
+  async function setViewport(device,mode) {
+    await send("Emulation.setDeviceMetricsOverride",{
+      width:mode.width,height:mode.height,deviceScaleFactor:device.touch ? 2:1,
+      mobile:device.touch,
+      screenWidth:mode.width,screenHeight:mode.height,
+    });
+    await sleep(100);
+  }
+  async function geometry(phase,id) {
+    const d=await evaluate("(()=>{"
+      +"const w=innerWidth,root=document.documentElement,detail=document.querySelector('.debrief'),"
+      +"map=document.querySelector('.canvas-wrap'),dpad=document.querySelector('.mobile-post-controls');"
+      +"const visible=e=>e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';"
+      +"const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}};"
+      +"const mobile=matchMedia('(max-width:720px)').matches;"
+      +"const actions=[...document.querySelectorAll('.top-actions button,.toolbar-controls button,.mobile-post-controls button,.debrief-actions button,.run,.score-ledger summary')].filter(visible);"
+      +"return {width:w,scrollWidth:root.scrollWidth,mobile,actions:actions.length,"
+      +"offscreen:actions.filter(e=>{const r=rect(e);return r.left< -3||r.right>w+3}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8),"
+      +"short:mobile?actions.filter(e=>{const r=rect(e);return r.width<43.5||r.height<43.5}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8):[],"
+      +"debrief:visible(detail)?rect(detail):null,map:visible(map)?rect(map):null,"
+      +"metricOverlaps:[...document.querySelectorAll('.metrics article')].map((card,i)=>{const a=card.querySelector('strong'),b=card.querySelector('small');if(!a||!b)return null;const u=rect(a),v=rect(b);const collide=u.right>v.left+1&&v.right>u.left+1&&u.bottom>v.top+1&&v.bottom>u.top+1;return collide?{index:i,clock:u,caption:v}:null}).filter(Boolean),"
+      +"earlyRun:visible(document.querySelector('.mobile-run-early'))?rect(document.querySelector('.mobile-run-early')):null,"
+      +"dpad:visible(dpad)?rect(dpad):null};})()");
+    assert.ok(d.width>0,id+" zero browser viewport");
+    assert.ok(d.scrollWidth<=d.width+3,id+" document horizontal overflow: "+JSON.stringify(d));
+    assert.deepEqual(d.offscreen,[],id+" actionable element beyond viewport: "+JSON.stringify(d));
+    assert.deepEqual(d.metricOverlaps,[],id+" score-caption collision: "+JSON.stringify(d));
+    assert.deepEqual(d.short,[],id+" undersized touch target: "+JSON.stringify(d));
+    if(phase==="debrief" && d.mobile) {
+      assert.ok(d.debrief&&d.debrief.left>=-2&&d.debrief.right<=d.width+2,
+        id+" mobile debrief offscreen "+JSON.stringify(d));
+    }
+    if(phase==="intro" && d.mobile) {
+      assert.ok(d.dpad && d.dpad.width<=d.width+2,
+        id+" missing or overflowing mobile precision controls "+JSON.stringify(d));
+      assert.ok(d.earlyRun && d.earlyRun.height>=44 && d.earlyRun.bottom<=d.map.top+3,
+        id+" mobile Start/Pause/Resume must be reachable above the tall map "+JSON.stringify(d));
+    }
+    console.info("RESPONSIVE_MATRIX "+JSON.stringify({phase,id,...d}));
+  }
+  // Completed R06 debrief, including its actual score, must remain accessible
+  // before any subsequent mode or mission changes.
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    await geometry("debrief",id);
+    await screenshot("matrix-"+id+"-debrief");
+    if(device.touch && mode.width<=360) {
+      const result=await evaluate("(()=>{const s=document.querySelector('.debrief');if(!s)return null;s.scrollTop=s.scrollHeight;const bounds=s.getBoundingClientRect();const actions=[...s.querySelectorAll('.debrief-actions button')];const boxes=actions.map(b=>b.getBoundingClientRect());return {scrollTop:s.scrollTop,scrollHeight:s.scrollHeight,clientHeight:s.clientHeight,visible:boxes.every(b=>b.top>=bounds.top-2&&b.bottom<=bounds.bottom+2),buttons:actions.length};})()");
+      assert.ok(result?.buttons===3&&result.visible,id+" debrief share/retry buttons unreachable after scroll: "+JSON.stringify(result));
+      await screenshot("matrix-"+id+"-debrief-bottom");
+      await evaluate("document.querySelector('.debrief').scrollTop=0");
+    }
+  }
+  await clickButton("Ajustar diseño");
+  const missionCases=[
+    ["Turno clásico","Turno clásico",0],
+    ["R04 · Las maletas cantoras","R04",4],
+    ["R05 · Dos vuelos, una pista","R05",2],
+    ["R06 · La fila que respira","R06",4],
+  ];
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    for(const [button,active,waves] of missionCases) {
+      await clickButton(button);
+      assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes("+JSON.stringify(active)+")"),true,id+" mission selection "+button);
+      assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),waves,id+" mission flight schedule "+button);
+      await geometry("intro",id+"-"+active);
+    }
+    assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent||''"),/0\/1 usado/,id+" R06 token missing");
+    await clickButton("Serpentina");
+    await clickButton("½ Lento");
+    assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes('½ Lento')"),true,id+" pace toggle");
+    await clickButton("Iniciar turno");
+    await clickButton("Pausar turno");
+    await clickButton("Reiniciar turno");
+    assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00",id+" reset");
+    await screenshot("matrix-"+id+"-intro");
+  }
+  console.info("RESPONSIVE_MATRIX_PASS devices="+devices.length+
+    " variants="+devices.reduce((n,d)=>n+modes(d).length,0)+
+    " mission_cases="+missionCases.length);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");

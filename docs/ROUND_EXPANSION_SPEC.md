@@ -1,6 +1,6 @@
 # Gateflow — expansión de rondas, mecánicas y experimentos
 
-**Estado (1 nov 2026, UTC):** diseño propuesto + cribado reproducible de 12 comparaciones A/B y 8 interacciones con un modelo simplificado. **R04/R05 tienen ahora un prototipo jugable con llegadas, pronóstico y replay determinista en una rama draft; ninguna ronda nueva está publicada o validada con jugadores.** R06–R39 siguen como propuestas. La Site privada v5 no debe modificarse; este trabajo pertenece al repositorio público de pruebas `PillB/gategame`. La aprobación del dueño y las pruebas de aceptación siguen siendo obligatorias. Ver [contrato de encanto y anécdotas de los 36 episodios](./DELIGHT_LEDGER.md).
+**Estado (2 nov 2026, UTC):** 12 pruebas A/B surrogate y 8 interacciones de un modelo simplificado; no son experimentos con personas. R04/R05 ya se publicaron en el **espejo de prueba** `PillB/gategame` (PR #13 / `2607d878`). R06 es un candidato **draft PR #17** (4×7 llegadas, respiro y una retirada opcional de cinta desde 14s), no publicado ni todavía validado en Chrome de CI. R07–R39 siguen como propuestas. La Site privada v5 debe permanecer sin cambios. Ver [contrato de encanto](./DELIGHT_LEDGER.md) y [gates falsables del PR](./RELEASE_LEDGER.md).
 
 ## 1. Lo que se conserva de las conversaciones previas
 
