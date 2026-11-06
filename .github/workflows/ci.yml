@@ -42,6 +42,14 @@ jobs:
         run: npm test
       - name: GitHub Pages build and artifact contract
         run: npm run test:pages
+      - name: Upload inspectable compiled PR site
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4/v6 pinned
+        with:
+          name: gateflow-pr-pages-${{ github.sha }}
+          path: dist/pages/
+          if-no-files-found: error
+          retention-days: 7
       - name: Chrome browser gameplay and mobile smoke
         run: node scripts/browser-smoke.mjs
       - name: Per-tick Chrome screenshot and state parity audit (R04/R05/R06 + live edit)
