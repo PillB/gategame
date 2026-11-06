@@ -233,6 +233,18 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .mobile-post-controls p{grid-column:1/-1;margin:0;font-size:11px;line-height:1.45;color:#d2e0e5}
 }
 
+/* Every phone-sized score card must stack its clock and caption. The generic
+   grid placed the long R06 adjustment at column 2, overlapping the clock in
+   375-412px screenshots although neither control was horizontally offscreen. */
+@media(max-width:720px){
+  .metrics article{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;min-width:0}
+  .metrics article>span,.metrics article>strong,.metrics article>small{max-width:100%;min-width:0;overflow-wrap:anywhere}
+  .metrics article>small{align-self:flex-start}
+}
+@media(max-width:300px){
+  .hero h2{font-size:29px;line-height:1.02;letter-spacing:-.055em}
+}
+
 /* Small-window directional controls: avoid the 138px D-pad + 125px actions
    overflowing a 280px folded/zoomed viewport. Keep 44px minimum targets. */
 @media(max-width:340px){
