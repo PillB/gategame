@@ -91,17 +91,19 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
 }
 try{
   profile=await mkdtemp(path.join(tmpdir(),"gateflow-ci-"));
+  let chromeDiagnostics="";
   chrome=spawn(findChrome(),["--headless=new","--no-sandbox","--disable-dev-shm-usage",
     "--disable-gpu","--no-first-run","--disable-background-networking",
     "--remote-allow-origins=*","--remote-debugging-port=0",
-    "--user-data-dir="+profile,"about:blank"],{stdio:"ignore"});
+    "--user-data-dir="+profile,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+  chrome.stderr?.on("data",(chunk)=>{chromeDiagnostics=(chromeDiagnostics+String(chunk)).slice(-6000);});
   let port=0;
-  for(let i=0;i<120;i++){
+  for(let i=0;i<400;i++){
     try{port=Number((await readFile(path.join(profile,"DevToolsActivePort"),"utf8")).split("\n")[0]);if(port>0)break;}catch{}
-    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized");
+    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized. "+chromeDiagnostics);
     await sleep(100);
   }
-  if(!port)throw Error("CDP port not ready");
+  if(!port)throw Error("CDP port not ready after 40 seconds. "+chromeDiagnostics);
   const targets=await(await fetch("http://127.0.0.1:"+port+"/json")).json();
   const target=targets.find(t=>t.type==="page");
   assert.ok(target?.webSocketDebuggerUrl);
