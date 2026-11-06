@@ -62,6 +62,10 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
   await screenshot(name+"-running");
   try {
     await waitFor("!!document.querySelector('section.debrief')",90000);
+    await waitFor("document.activeElement?.classList.contains('debrief')",3000);
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('role')"),"region",
+      "Debrief must be navigable as a named landmark without claiming an untrapped modal");
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
   } catch (error) {
     console.error("BROWSER_TIMEOUT_DIAGNOSTICS "+JSON.stringify(await evaluate("(()=>({time:document.querySelector('.metrics article:first-child strong')?.textContent,header:document.querySelector('.top-actions')?.textContent,objective:document.querySelector('.objective')?.textContent.slice(0,250),errors:document.querySelector('.toolbar')?.textContent.slice(0,160)}))()")));
     await screenshot(name+"-timeout");
