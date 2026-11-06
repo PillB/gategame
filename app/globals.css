@@ -233,6 +233,12 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .mobile-post-controls p{grid-column:1/-1;margin:0;font-size:11px;line-height:1.45;color:#d2e0e5}
 }
 
+/* Put the launch action before the two tall playfield zones on mobile;
+   retain the below-board control for players editing from the bottom. */
+.mobile-run-early{display:none}
+@media(max-width:720px){
+  .mobile-run-early{display:block;width:100%;min-height:48px;border-radius:0;box-shadow:none;border-top:1px solid #d9ff5470}
+}
 /* Every phone-sized score card must stack its clock and caption. The generic
    grid placed the long R06 adjustment at column 2, overlapping the clock in
    375-412px screenshots although neither control was horizontally offscreen. */
