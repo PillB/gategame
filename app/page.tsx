@@ -721,6 +721,7 @@ export default function Home() {
         {roundId === "r06" && <div className="breath-banner" role="status"><strong>📖 PASAJE DE RESPIRO · {sim.breathEdits}/1 usado</strong><span>{sim.breathEdits ? "El corredor quedó abierto. Ya usaste tu único cambio en marcha." : finished ? "Turno cerrado; guardaste el cambio de respiro." : !breathOpen ? "Disponible desde 00:14: podrás retirar una cinta. No podrás añadir barreras." : "¡Un cambio disponible! Pausa el turno cuando quieras y retira una cinta existente. No caduca."}</span></div>}
         {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
+        {!finished && <button type="button" className="run mobile-run-early" onClick={run}>{sim.running ? "Ⅱ  Pausar turno" : sim.elapsed ? "▶  Reanudar turno" : "▶  Iniciar turno"}</button>}
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
           <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} breathMode={breathOpen} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
           <span className="zone upper">ZONA B · SEGURIDAD</span><span className="zone lower">ZONA A · MIGRACIONES</span>
