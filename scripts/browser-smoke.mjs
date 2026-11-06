@@ -225,10 +225,12 @@ try{
       +"offscreen:actions.filter(e=>{const r=rect(e);return r.left< -3||r.right>w+3}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8),"
       +"short:mobile?actions.filter(e=>{const r=rect(e);return r.width<43.5||r.height<43.5}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8):[],"
       +"debrief:visible(detail)?rect(detail):null,map:visible(map)?rect(map):null,"
+      +"metricOverlaps:[...document.querySelectorAll('.metrics article')].map((card,i)=>{const a=card.querySelector('strong'),b=card.querySelector('small');if(!a||!b)return null;const u=rect(a),v=rect(b);const collide=u.right>v.left+1&&v.right>u.left+1&&u.bottom>v.top+1&&v.bottom>u.top+1;return collide?{index:i,clock:u,caption:v}:null}).filter(Boolean),"
       +"dpad:visible(dpad)?rect(dpad):null};})()");
     assert.ok(d.width>0,id+" zero browser viewport");
     assert.ok(d.scrollWidth<=d.width+3,id+" document horizontal overflow: "+JSON.stringify(d));
     assert.deepEqual(d.offscreen,[],id+" actionable element beyond viewport: "+JSON.stringify(d));
+    assert.deepEqual(d.metricOverlaps,[],id+" score-caption collision: "+JSON.stringify(d));
     assert.deepEqual(d.short,[],id+" undersized touch target: "+JSON.stringify(d));
     if(phase==="debrief" && d.mobile) {
       assert.ok(d.debrief&&d.debrief.left>=-2&&d.debrief.right<=d.width+2,
@@ -247,6 +249,12 @@ try{
     await setViewport(device,mode);
     await geometry("debrief",id);
     await screenshot("matrix-"+id+"-debrief");
+    if(device.touch && mode.width<=360) {
+      const result=await evaluate("(()=>{const s=document.querySelector('.debrief');if(!s)return null;s.scrollTop=s.scrollHeight;const bounds=s.getBoundingClientRect();const actions=[...s.querySelectorAll('.debrief-actions button')];const boxes=actions.map(b=>b.getBoundingClientRect());return {scrollTop:s.scrollTop,scrollHeight:s.scrollHeight,clientHeight:s.clientHeight,visible:boxes.every(b=>b.top>=bounds.top-2&&b.bottom<=bounds.bottom+2),buttons:actions.length};})()");
+      assert.ok(result?.buttons===3&&result.visible,id+" debrief share/retry buttons unreachable after scroll: "+JSON.stringify(result));
+      await screenshot("matrix-"+id+"-debrief-bottom");
+      await evaluate("document.querySelector('.debrief').scrollTop=0");
+    }
   }
   await clickButton("Ajustar diseño");
   const missionCases=[
