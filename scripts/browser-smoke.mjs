@@ -45,7 +45,7 @@ async function waitFor(js,maxMs=17000){
   throw Error("Timed out waiting for "+js);
 }
 async function clickButton(label){
-  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+"));if(!b||b.disabled)return false;b.click();return true})()";
+  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+")&&x.getClientRects().length>0&&getComputedStyle(x).visibility!=='hidden');if(!b||b.disabled)return false;b.click();return true})()";
   assert.equal(await evaluate(js),true,"Button missing: "+label);
   await sleep(85);
 }
@@ -226,6 +226,7 @@ try{
       +"short:mobile?actions.filter(e=>{const r=rect(e);return r.width<43.5||r.height<43.5}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8):[],"
       +"debrief:visible(detail)?rect(detail):null,map:visible(map)?rect(map):null,"
       +"metricOverlaps:[...document.querySelectorAll('.metrics article')].map((card,i)=>{const a=card.querySelector('strong'),b=card.querySelector('small');if(!a||!b)return null;const u=rect(a),v=rect(b);const collide=u.right>v.left+1&&v.right>u.left+1&&u.bottom>v.top+1&&v.bottom>u.top+1;return collide?{index:i,clock:u,caption:v}:null}).filter(Boolean),"
+      +"earlyRun:visible(document.querySelector('.mobile-run-early'))?rect(document.querySelector('.mobile-run-early')):null,"
       +"dpad:visible(dpad)?rect(dpad):null};})()");
     assert.ok(d.width>0,id+" zero browser viewport");
     assert.ok(d.scrollWidth<=d.width+3,id+" document horizontal overflow: "+JSON.stringify(d));
@@ -239,6 +240,8 @@ try{
     if(phase==="intro" && d.mobile) {
       assert.ok(d.dpad && d.dpad.width<=d.width+2,
         id+" missing or overflowing mobile precision controls "+JSON.stringify(d));
+      assert.ok(d.earlyRun && d.earlyRun.height>=44 && d.earlyRun.bottom<=d.map.top+3,
+        id+" mobile Start/Pause/Resume must be reachable above the tall map "+JSON.stringify(d));
     }
     console.info("RESPONSIVE_MATRIX "+JSON.stringify({phase,id,...d}));
   }
