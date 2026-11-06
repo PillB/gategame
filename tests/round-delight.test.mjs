@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ROUNDS, arrivalAt, getRound, paceClockCaption, scoredElapsed, upcomingWave } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, canRemoveLiveBelt, getRound, paceClockCaption, scoredElapsed, upcomingWave } from "../lib/rounds.js";
 
 const document = readFileSync(new URL("../docs/DELIGHT_LEDGER.md", import.meta.url), "utf8");
 
@@ -82,4 +82,19 @@ test("new mission labels and messages remain in Spanish and accessible without c
       assert.ok(message.length >= 10,`Uninformative mission cue: ${message}`);
     }
   }
+});
+
+// Active shift faults may visually open/rotate a belt that still exists in
+// the original layout. Spending the respiro on that invisible base edge must
+// not claim to open a new corridor, nor consume the player's sole edit.
+test("R06 only permits spending respiro on a belt currently visible", () => {
+  const original = [{ from: "4:9", to: "5:9" }, { from: "6:9", to: "7:9" }];
+  assert.equal(canRemoveLiveBelt(original,original,"4:9","5:9"),true);
+  assert.equal(canRemoveLiveBelt(original,original,"5:9","4:9"),true);
+  assert.equal(canRemoveLiveBelt(original,original.slice(1),"4:9","5:9"),false,
+    "An open-belt fault cannot consume the one-time removal");
+  assert.equal(canRemoveLiveBelt(original,[{from:"4:9",to:"4:10"}],"4:9","5:9"),false,
+    "A rotated-belt fault cannot consume the one-time removal");
+  assert.equal(canRemoveLiveBelt(original,original,"4:9","6:9"),false,
+    "A pair that was never linked cannot consume the edit");
 });
