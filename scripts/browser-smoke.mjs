@@ -159,7 +159,24 @@ try{
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),paused);
   await clickButton("Reiniciar turno");
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
+  // A tab switch is an actual lifecycle transition, not a background score
+  // opportunity. Exercise the DOM event and assert the visible clock freezes.
+  await clickButton("Iniciar turno");
+  await waitFor("document.querySelector('.metrics article:first-child strong')?.textContent!=='00:00'");
+  await evaluate("Object.defineProperty(document,'visibilityState',{value:'hidden',configurable:true});document.dispatchEvent(new Event('visibilitychange'))");
+  await waitFor("document.querySelector('.top-actions')?.textContent.includes('en pausa')");
+  const hiddenClock = await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
+  await sleep(150);
+  assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),hiddenClock,
+    "Backgrounding advanced the player clock instead of automatically pausing");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/pausado automáticamente/);
+  await evaluate("delete document.visibilityState;document.dispatchEvent(new Event('visibilitychange'))");
+  await clickButton("Reiniciar turno");
   await fullRound("División guiada","02-guided");
+  const decisions = await evaluate("([...document.querySelectorAll('.ops-counters span')].map(e=>e.textContent))");
+  assert.ok(decisions.some(x=>/decisiones de quedarse/.test(x)),"Queue-stay choices are hidden from the player");
+  assert.equal(decisions.reduce((n,x)=>n+(/cambios de fila|decisiones de quedarse/.test(x)?Number(x.match(/^\\d+/)?.[0]||0):0),0),53,
+    "The UI must expose all 53 stage choices, not just successful lane switches");
   await evaluate("document.querySelector('.score-ledger summary')?.click()");
   await screenshot("03-score-ledger");
   await clickButton("Copiar desafío");
