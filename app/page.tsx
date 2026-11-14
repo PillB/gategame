@@ -185,9 +185,12 @@ function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim
     if (elapsed < workerTimes(worker).arrive || faultedWorkers.includes(worker.id)) continue;
     faultedWorkers.push(worker.id);
     if (!worker.faultKind) continue;
-    const crossed = findWorkerCrossing(effectiveEdges(edges, faults)[worker.grid], Math.min(CELL_COLS - 1, worker.lane * 2 + 1));
+    // The active fault map does not change between crossing lookup and its application.
+    // Reusing one snapshot avoids replaying every earlier fault twice per worker.
+    const workerEdges = effectiveEdges(edges, faults)[worker.grid];
+    const crossed = findWorkerCrossing(workerEdges, Math.min(CELL_COLS - 1, worker.lane * 2 + 1));
     if (!crossed) continue;
-    const result = applyBeltFault(effectiveEdges(edges, faults)[worker.grid], crossed, worker.faultKind, POST_COLS, POST_ROWS);
+    const result = applyBeltFault(workerEdges, crossed, worker.faultKind, POST_COLS, POST_ROWS);
     faults.push({ id: `${worker.id}-${crossed.from}`, grid: worker.grid, kind: worker.faultKind as BeltFault["kind"], original: crossed, applied: result.applied, worker: worker.name, flagged: false, repaired: false });
     events.push({ id: `${elapsed}-${worker.id}-belt`, passengerId: worker.lane, phase: "ops", title: "La cinta cambió de posición", detail: `${worker.name} cruzó la zona. Inspecciona la conexión cercana y márcala para que el supervisor la repare.`, tone: "warn", time: elapsed });
   }
@@ -527,6 +530,17 @@ export default function Home() {
     const timer = window.setInterval(() => setSim((state) => tick(state, edgeRef.current, roundId)), simulationInterval(pace, DT));
     return () => clearInterval(timer);
   }, [sim.running, pace, roundId]);
+  // Background tabs throttle interval timers. Pause explicitly instead of allowing
+  // the scored round to advance an unpredictable number of ticks offscreen.
+  useEffect(() => {
+    function pauseOnHidden() {
+      if (document.visibilityState !== "hidden" || !sim.running) return;
+      setSim((state) => state.running ? { ...state, running: false } : state);
+      setMessage("Turno pausado automáticamente al cambiar de pestaña. Reanuda cuando estés listo.");
+    }
+    document.addEventListener("visibilitychange", pauseOnHidden);
+    return () => document.removeEventListener("visibilitychange", pauseOnHidden);
+  }, [sim.running]);
 
   const terminalStages: Stage[] = ["done", "failed", "turnedAway", "left"];
   const active = sim.agents.filter((agent) => !terminalStages.includes(agent.stage)).length;
@@ -749,7 +763,7 @@ export default function Home() {
           <strong>{Math.max(0, TARGET - resolved)}</strong><p>pasajeros pendientes de atención</p>
           <div className="progress"><span style={{ width: `${resolved / TARGET * 100}%` }} /></div>
           <div className="outcomes"><span><b>{sim.cleared}</b> atendidos</span><span><b>{sim.turnedAway}</b> rechazados</span><span><b>{sim.abandoned}</b> se retiraron</span><span><b>{sim.failed}</b> varados</span></div>
-          <div className="ops-counters"><span><b>{sim.queueSwitches}</b> cambios de fila</span><span><b>{sim.repairs}</b> cintas reparadas</span></div>
+          <div className="ops-counters"><span><b>{sim.queueSwitches}</b> cambios de fila</span><span><b>{sim.queueStays}</b> decisiones de quedarse</span><span><b>{sim.repairs}</b> cintas reparadas</span></div>
           <div className="micro-goals"><span className={sim.cleared >= 24 ? "met" : ""}>24 atendidos</span><span className={finished && sim.abandoned === 0 ? "met" : ""}>sin abandonos</span><span className={finished && sim.retries === 0 ? "met" : ""}>sin reintentos</span><span className={finished && paceElapsed <= 55 ? "met" : ""}>≤ 00:55 netos</span></div>
         </section>
         <section className="incident-feed" aria-live="polite">
