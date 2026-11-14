@@ -4,6 +4,13 @@ Gateflow is a client-side, deterministic airport queue strategy game with a Span
 
 The migration baseline was the Gateflow v5 Sites source at commit `8dbe2148b47d0d45aee5e5058f1717216d86608b`. Track later updates through the Git history and deployment `version.json` rather than assuming the live Sites and Pages deployments are identical.
 
+## Architecture, agents and state-machine audit
+
+- [Agent engineering and QA contract](./AGENTS.md) (also referenced from [CLAUDE.md](./CLAUDE.md)); mandatory `npm run lint:complexity` gate for `lib/` and four red-team passes.
+- [Implicit state-machine diagrams](./docs/STATE_MACHINES.md) (run, passengers, worker faults, player edits, sharing, release).
+- [State-machine issue / no-op ledger](./docs/STATE_MACHINE_AUDIT_LEDGER.md) distinguishes confirmed source findings from still-unverified manual gates.
+- Do not add D1 pooling, optimistic locks, or an outbox to this client-only game without a real concurrent server use case.
+
 ## Requirements
 
 - Node.js `>=22.13.0` (the GitHub Actions checks use Node.js 24)
