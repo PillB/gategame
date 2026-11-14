@@ -14,7 +14,7 @@ test("round variants are unique, one-factor comparisons with explicit decisions"
 });
 
 test("round config rejects invalid or hostile input without silently coercing", () => {
-  for (const config of [{ lanes: 0 }, { lanes: NaN }, { passengers: -1 }, { infoLag: Infinity },
+  for (const config of [{ constructor: 42 }, JSON.parse('{"__proto__":{"admin":true}}'), { lanes: 0 }, { lanes: NaN }, { passengers: -1 }, { infoLag: Infinity },
     { activeLanes: 8 }, { outages: 7 }, { serviceTailRate: 1.1 }, { shiftStyle: "other" },
     { __proto__: null, surprise: true }, [], null]) {
     assert.throws(() => validateRoundConfig(config));
@@ -71,4 +71,20 @@ test("combined late-round complications conserve passengers and report their non
       assert.ok(Math.abs(metric.together - metric.aloneLeft - metric.aloneRight - metric.interaction) < 0.00001);
     }
   }
+});
+
+test("independent published surrogate benchmarks survive complexity refactoring", () => {
+  // Historical 128-seed screening values are frozen in ROUND_EXPANSION_SPEC;
+  // they are an external characterization, not computed from this implementation.
+  const ab06 = ROUND_AB_PAIRS.find((item) => item.id === "AB06");
+  const ab10 = ROUND_AB_PAIRS.find((item) => item.id === "AB10");
+  const patience = pairedSurrogateScreen(ab06, 128).metrics;
+  const transfer = pairedSurrogateScreen(ab10, 128).metrics;
+  assert.ok(Math.abs(patience.abandoned.delta - 1.98) < .11,
+    "AB06 decreased-patience abandonment no longer matches the published benchmark");
+  assert.ok(Math.abs(patience.cleared.delta + 1.82) < .11,
+    "AB06 cleared outcome no longer matches the published benchmark");
+  assert.ok(Math.abs(transfer.elapsed.delta + .36) < .11,
+    "AB10 nearly-cosmetic transfer time changed without an explicit review");
+  // Still a surrogate: these deltas are NOT human enjoyment or real-game outcomes.
 });
