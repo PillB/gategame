@@ -36,6 +36,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Lint
         run: npm run lint
+      - name: "chore(lint): prove cyclomatic complexity ceiling and negative control"
+        run: npm run lint:complexity
       - name: Type-check the Pages gameplay/adapter
         run: npm run typecheck:pages
       - name: Simulation and Sites Worker rendering
