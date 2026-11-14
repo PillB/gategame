@@ -19,6 +19,12 @@ The game should support the loop **understand → design → predict → simulat
 
 Passenger transition: `grid1 → choice1 → walk1 (when changing lanes) → queue1 → service1 → grid2 → choice2 → walk2 (when changing lanes) → queue2 → service2 → done`, with terminal branches `turnedAway`, `left`, `failed`. Immigration failures cannot enter security. All agents must reach exactly one terminal state; no duplication or disappearance.
 
+### R06 refinement and operational lifecycle (candidate, not released)
+
+R06 extends the Build/Run/Pause contract by permitting **one removal of a belt that is actually visible** after `elapsed >= 14.0` and before completion. It is optional and has no expiring deadline. A worker fault that already opened or rotated away a belt cannot consume the token. When the browser tab becomes hidden, the new candidate pauses the running simulation; resumption is an explicit user action. These candidate behaviors must be verified on the exact tested SHA.
+
+For the full nested lifecycle, queue walks, staff faults, challenge state and release gates, see [state diagrams](./STATE_MACHINES.md) and [negative-test ledger](./STATE_MACHINE_AUDIT_LEDGER.md). Do not model every derived boolean (finished, rank, score, layoutLocked) as an independent state: they must be derived from authoritative counters and current rules.
+
 ## Mathematical specification
 
 At time `t`, let `spawned = active + cleared + failed + turnedAway + abandoned`. For a completed run `spawned = 28` and all 28 are terminal; no passenger is counted twice. Time advances in deterministic steps of `DT = 0.1` simulation seconds; speed buttons change *wall-clock* interval, not the simulated outcomes. Passenger event selection, layout fingerprint, arrivals, patience and worker characteristics are seeded, reproducible under identical configuration.
