@@ -175,7 +175,13 @@ try{
   await fullRound("División guiada","02-guided");
   const decisions = await evaluate("([...document.querySelectorAll('.ops-counters span')].map(e=>e.textContent))");
   assert.ok(decisions.some(x=>/decisiones de quedarse/.test(x)),"Queue-stay choices are hidden from the player");
-  assert.equal(decisions.reduce((n,x)=>n+(/cambios de fila|decisiones de quedarse/.test(x)?Number(x.match(/^\\d+/)?.[0]||0):0),0),53,
+  const counts = decisions.filter((x)=>/cambios de fila|decisiones de quedarse/.test(x)).map((x)=>{
+    const match = x.trim().match(/^([0-9]+) /);
+    assert.ok(match,"Unparseable visible queue decision counter: "+JSON.stringify(x));
+    return Number(match[1]);
+  });
+  assert.equal(counts.length,2,"Expected both visible stay and switch counts");
+  assert.equal(counts[0]+counts[1],53,
     "The UI must expose all 53 stage choices, not just successful lane switches");
   await evaluate("document.querySelector('.score-ledger summary')?.click()");
   await screenshot("03-score-ledger");
