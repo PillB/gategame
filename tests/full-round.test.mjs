@@ -165,6 +165,12 @@ for (const [name, layout] of scenarios) {
     assert.equal(first.score, repeat.score);
     assert.ok(first.walkingSeen > 0, "No passenger used a walk stage: path untested");
     assert.equal(first.switchesInferred, first.state.queueSwitches);
+    // Both choices (immigration for all 28; security for the 25 cleared)
+    // must be accounted for as exactly one stay-or-switch decision.
+    // This would fail if queueStays stopped changing while the UI still displayed it.
+    assert.equal(first.state.queueStays + first.state.queueSwitches,
+      first.state.cleared * 2 + first.state.turnedAway,
+      "Stay/switch decisions do not account for both service-stage choices");
     assert.deepEqual({
       elapsed: +first.state.elapsed.toFixed(1), cleared: first.state.cleared,
       turnedAway: first.state.turnedAway, switches: first.state.queueSwitches,
