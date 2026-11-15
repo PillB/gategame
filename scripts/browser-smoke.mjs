@@ -131,7 +131,7 @@ try{
   // Speed up only the CI browser's wall clock. Simulation DT and seed remain unchanged.
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await send("Page.addScriptToEvaluateOnNewDocument",{source:
-    "const originalInterval=window.setInterval.bind(window);window.setInterval=(fn,ms,...args)=>originalInterval(fn,Math.min(ms,10),...args);"});
+    "const originalInterval=window.setInterval.bind(window);window.__gateflowFreezeTimers=false;window.setInterval=(fn,ms,...args)=>originalInterval((...values)=>{if(!window.__gateflowFreezeTimers)fn(...values);},Math.min(ms,10),...args);"});
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await screenshot("01-desktop-build");
@@ -146,7 +146,14 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
+  // Hold the CI-only wall-clock timer so the run is truly active at t=0.
+  // This catches the original bug that unlocked presets before the first tick.
+  await evaluate("window.__gateflowFreezeTimers=true");
   await clickButton("Iniciar turno");
+  assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
+  assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
+    "Live zero-tick turn must not allow a layout preset change");
+  await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
   await sleep(200);
