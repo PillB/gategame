@@ -19,6 +19,10 @@ The game should support the loop **understand → design → predict → simulat
 
 Passenger transition: `grid1 → choice1 → walk1 (when changing lanes) → queue1 → service1 → grid2 → choice2 → walk2 (when changing lanes) → queue2 → service2 → done`, with terminal branches `turnedAway`, `left`, `failed`. Immigration failures cannot enter security. All agents must reach exactly one terminal state; no duplication or disappearance.
 
+### Immutable debrief result and explicit return to editing (SM-20)
+
+The last tick's score, fingerprint, and share link must describe the **same** starting layout and legal mid-round edit decisions. While the debrief is visible, a click on the underlying canvas or precision D-pad must never alter `edges`; the canvas is read-only and removed from keyboard navigation. Only an explicit action such as `Ajustar diseño`, mission choice or preset returns to editable state (with fresh simulation counters). This guards against a completed score being copied after someone changes the board without a rerun. The [state diagram](./STATE_MACHINES.md) and [SM-20 browser negative test](./STATE_MACHINE_AUDIT_LEDGER.md) capture the independent oracle.
+
 ### R06 refinement and operational lifecycle (candidate, not released)
 
 R06 extends the Build/Run/Pause contract by permitting **one removal of a belt that is actually visible** after `elapsed >= 14.0` and before completion. It is optional and has no expiring deadline. A worker fault that already opened or rotated away a belt cannot consume the token. When the browser tab becomes hidden, the new candidate pauses the running simulation; resumption is an explicit user action. These candidate behaviors must be verified on the exact tested SHA.
