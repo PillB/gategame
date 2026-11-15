@@ -33,6 +33,17 @@ When the CLI environment cannot access Chrome, use hosted GitHub Actions once an
 - `app/page.tsx` contains documented legacy debt (`Home`, `tick`, `move` mix React, simulation, and rendering). Do not add branch-heavy domain logic there; refactor with deterministic baseline tests. Extending the 20-path gate to this module is a tracked migration, **not a claim of present compliance**. If a change must touch legacy logic, record why it cannot yet be extracted and its coverage.
 - The numerical cap is a guardrail, **not a quality score**. A function under the cap can still be wrong, redundant, slow, or contradictory.
 
+### Expert challenge and explicit trade-off review
+
+For every new mechanic, UI step, animation, data representation, test oracle, infrastructure pattern, and release decision:
+1. Find an authoritative standard, a comparable successful implementation, or the strongest available empirical evidence. State *what a domain expert would reject* about the current proposal, not just its attractions.
+2. Specify an alternative that an expert would accept, with a falsifiable user outcome or technical invariant. If the likely expert rejection can be avoided at reasonable scope, reject the weaker design. Do not optimize merely for the lowest implementation effort.
+3. Record **every trade-off**: correctness, usability, scientific validity, performance, maintenance, accessibility, rollout and reversibility. State what is deliberately deferred; never silently count it as done.
+4. Require meaningful negative tests: on geometrical grids, reverse an edge, duplicate a physical belt, alias a post ID, import incompatible URL rules, and compare the resulting *observable* behavior. For timing state, test hidden vs visible and fast repeat input. For scores, use independent conservation or published baselines.
+5. Research references before modifying a previously failing hypothesis; if an essential external service is unavailable, mark it BLOCKED and stop calls to that service.
+
+Reference starting points: [ESLint complexity](https://eslint.org/docs/latest/rules/complexity), [statechart transition guards](https://statecharts.dev/glossary/guard.html), [Page Visibility](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API), [WCAG 2.2](https://www.w3.org/TR/wcag/), [input normalization and validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html), [Playwright retrying assertions](https://playwright.dev/docs/test-assertions), and [Cloudflare D1 bindings](https://developers.cloudflare.com/workers/databases/connecting-to-databases/).
+
 ### Four independent red-team passes before release
 
 1. **State and math:** enumerate allowed/forbidden transitions, zero/one/multiple edges, 0/14/last tick, counts, FIFO, score, faults, deterministic replays; assert conservation `spawned = active + cleared + failed + turnedAway + abandoned`.
