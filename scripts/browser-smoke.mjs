@@ -199,6 +199,9 @@ try{
     "R05 has not yet started; +6.28 is a rule adjustment, not elapsed time");
   await fullRound("Espacio libre","09-r05",24,810);
   await clickButton("R06 · La fila que respira");
+  assert.match(await evaluate("document.querySelector('.contract')?.textContent||''"),
+    /respiro desde 00:14.*retirar UNA cinta visible/,
+    "Instructions must disclose R06's one exceptional allowed live removal");
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
   assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent"),/0\/1 usado.*Disponible desde 00:14/);
   await fullRound("Serpentina","12-r06-no-breath",25,833);
@@ -361,6 +364,19 @@ try{
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false);
+
+  // A challenge with both directed encodings of one physical belt used to
+  // pass layout validation despite providing zero additional corridor blockage.
+  const physicalA = 1 * 15 + 1, physicalB = 1 * 15 + 2, postCount = 15 * 12;
+  const physicalDuplicateCode = "G1." +
+    (physicalA * postCount + physicalB).toString(36).toUpperCase() + "." +
+    (physicalB * postCount + physicalA).toString(36).toUpperCase();
+  await send("Page.navigate", {url: "http://127.0.0.1:" + serverPort +
+    "/gategame/?layout=" + physicalDuplicateCode + "&beat=947"});
+  await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
+  await sleep(200);
+  assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"), false,
+    "Reciprocal duplicate geometry must not create a comparable challenge");
   assert.equal(errors.length,0,errors.join("\n"));
   console.info("BROWSER_SMOKE_PASS commit="+JSON.parse(await readFile(path.join(root,"version.json"),"utf8")).sourceRevision);
 }finally{
