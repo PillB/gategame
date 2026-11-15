@@ -482,6 +482,7 @@ export default function Home() {
   const [shareFallback, setShareFallback] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] = useState<{ score: number; fingerprint: string } | null>(null);
   const edgeRef = useRef(edges);
+  const debriefRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -526,6 +527,9 @@ export default function Home() {
   const queued = sim.agents.filter((agent) => agent.stage === "queue1" || agent.stage === "queue2").length;
   const resolved = sim.cleared + sim.failed + sim.turnedAway + sim.abandoned;
   const finished = sim.spawned === TARGET && resolved === TARGET;
+  useEffect(() => {
+    if (finished) debriefRef.current?.focus({ preventScroll: true });
+  }, [finished]);
   const layoutLocked = (sim.elapsed > 0 || sim.running) && !finished;
   const boardReadOnly = finished || layoutLocked;
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
@@ -701,9 +705,9 @@ export default function Home() {
           <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={boardReadOnly} completed={finished} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
           <span className="zone upper">ZONA B · SEGURIDAD</span><span className="zone lower">ZONA A · MIGRACIONES</span>
           <span className={`flow-indicator ${flowMood}`} aria-live="polite"><i />{flowLabel}</span>
-          {finished && <section className="debrief" aria-label="Resumen del turno">
+          {finished && <section ref={debriefRef} tabIndex={-1} role="region" aria-labelledby="gateflow-debrief-title" className="debrief">
             <div className="grade">{rank.grade}</div>
-            <div className="debrief-copy"><p className="label">RESUMEN DE {round.title.toUpperCase()} · {fingerprint}</p><h3>{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD DE ESTA MISIÓN</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
+            <div className="debrief-copy"><p className="label">RESUMEN DE {round.title.toUpperCase()} · {fingerprint}</p><h3 id="gateflow-debrief-title">{rank.title}</h3><p><strong>{score}</strong> puntos · {sim.cleared}/{TARGET} atendidos en {timeLabel(sim.elapsed)}</p>{isNewBest && <span className="new-best">NUEVO RÉCORD DE ESTA MISIÓN</span>}{roundDelta && <p className={`round-delta ${roundDelta.tone}`} role="status">{roundDelta.text}</p>}</div>
             <div className="medals">{medals.map((medal) => <div className={medal.earned ? "earned" : ""} key={medal.id}><i>{medal.earned ? "◆" : "◇"}</i><span><b>{medal.title}</b><small>{medal.detail}</small></span></div>)}</div>
             <details className="score-ledger"><summary>Ver cálculo de la puntuación</summary><dl>{ledgerItems.map(([label, points]) => <div key={label}><dt>{label}</dt><dd>{points > 0 ? "+" : ""}{points.toLocaleString("es-PE", { maximumFractionDigits: 1 })}</dd></div>)}</dl><p>Total tras redondear y limitar entre 0 y 1000: <strong>{score}</strong> puntos. Reparar una falla suma 40 y evita una penalización de 35.</p></details>
             {roundId !== DEFAULT_ROUND && <p className="next-experiment"><strong>RELOJ JUSTO</strong> El turno duró {timeLabel(sim.elapsed)}; para comparar con el clásico, puntuamos {timeLabel(paceElapsed)}. {landingOffset > 0 ? `Restamos ${landingOffsetLabel} s porque el último avión aterrizó más tarde que en el clásico.` : landingOffset < 0 ? `Sumamos ${landingOffsetLabel} s porque el último avión aterrizó antes que en el clásico.` : "Los últimos vuelos aterrizaron a la misma hora."} Así el último horario no añade ni quita ventaja artificial en el reloj.</p>}
