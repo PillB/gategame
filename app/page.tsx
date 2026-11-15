@@ -278,8 +278,8 @@ function cellPoint(grid: Grid, node: string) {
 }
 const laneX = (lane: number) => 81 + lane * 116;
 
-function Board({ edges, agents, selected, locked, breathMode, elapsed, faults, onNode }: {
-  edges: [Edge[], Edge[]]; agents: Agent[]; selected: { grid: Grid; node: string } | null; locked: boolean; breathMode: boolean; elapsed: number; faults: BeltFault[]; onNode: (grid: Grid, node: string) => void;
+function Board({ edges, agents, selected, locked, completed, breathMode, elapsed, faults, onNode }: {
+  edges: [Edge[], Edge[]]; agents: Agent[]; selected: { grid: Grid; node: string } | null; locked: boolean; completed: boolean; breathMode: boolean; elapsed: number; faults: BeltFault[]; onNode: (grid: Grid, node: string) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState<{ grid: Grid; node: string }>({ grid: 0, node: `0:${POST_ROWS - 1}` });
@@ -414,7 +414,7 @@ function Board({ edges, agents, selected, locked, breathMode, elapsed, faults, o
   }, [agents, cursor, edges, elapsed, faults, queueOrder, selected]);
 
   function choose(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (!ref.current) return;
+    if (completed || !ref.current) return;
     const box = ref.current.getBoundingClientRect(), px = (event.clientX - box.left) / box.width * BOARD_W, py = (event.clientY - box.top) / box.height * BOARD_H;
     let best: { grid: Grid; node: string; distance: number } | null = null;
     for (const grid of [0, 1] as Grid[]) {
@@ -426,6 +426,7 @@ function Board({ edges, agents, selected, locked, breathMode, elapsed, faults, o
     if (best) { setCursor({ grid: best.grid, node: best.node }); onNode(best.grid, best.node); }
   }
   function navigate(event: React.KeyboardEvent<HTMLCanvasElement>) {
+    if (completed) return;
     const point = parseNode(cursor.node); let x = point.x, y = point.y, grid = cursor.grid;
     if (event.key === "PageUp") grid = 1;
     else if (event.key === "PageDown") grid = 0;
@@ -453,18 +454,18 @@ function Board({ edges, agents, selected, locked, breathMode, elapsed, faults, o
         <output aria-live="polite">Zona {cursor.grid === 0 ? "migraciones" : "seguridad"} · poste {cursor.node}</output>
       </div>
       <div className="mobile-post-dpad" role="group" aria-label="Mover el poste enfocado">
-        <button type="button" className="up" aria-label="Mover al poste de arriba" disabled={point.y === 0} onClick={() => movePost(0, -1)}>↑</button>
-        <button type="button" className="left" aria-label="Mover al poste de la izquierda" disabled={point.x === 0} onClick={() => movePost(-1, 0)}>←</button>
-        <button type="button" className="right" aria-label="Mover al poste de la derecha" disabled={point.x === POST_COLS - 1} onClick={() => movePost(1, 0)}>→</button>
-        <button type="button" className="down" aria-label="Mover al poste de abajo" disabled={point.y === POST_ROWS - 1} onClick={() => movePost(0, 1)}>↓</button>
+        <button type="button" className="up" aria-label="Mover al poste de arriba" disabled={completed || point.y === 0} onClick={() => movePost(0, -1)}>↑</button>
+        <button type="button" className="left" aria-label="Mover al poste de la izquierda" disabled={completed || point.x === 0} onClick={() => movePost(-1, 0)}>←</button>
+        <button type="button" className="right" aria-label="Mover al poste de la derecha" disabled={completed || point.x === POST_COLS - 1} onClick={() => movePost(1, 0)}>→</button>
+        <button type="button" className="down" aria-label="Mover al poste de abajo" disabled={completed || point.y === POST_ROWS - 1} onClick={() => movePost(0, 1)}>↓</button>
       </div>
       <div className="mobile-post-actions">
-        <button type="button" aria-label="Cambiar zona del plano" onClick={() => setCursor((previous) => ({ ...previous, grid: previous.grid === 0 ? 1 : 0 }))}>Cambiar zona</button>
-        <button type="button" className="select-post" aria-label="Seleccionar poste enfocado" onClick={() => onNode(cursor.grid, cursor.node)}>{locked ? "Inspeccionar poste" : "Usar este poste"}</button>
+        <button type="button" aria-label="Cambiar zona del plano" disabled={completed} onClick={() => setCursor((previous) => ({ ...previous, grid: previous.grid === 0 ? 1 : 0 }))}>Cambiar zona</button>
+        <button type="button" className="select-post" disabled={completed} aria-label={completed ? "Turno terminado. Ajusta el diseño para volver a seleccionar postes" : "Seleccionar poste enfocado"} onClick={() => onNode(cursor.grid, cursor.node)}>{completed ? "Turno terminado" : locked ? "Inspeccionar poste" : "Usar este poste"}</button>
       </div>
-      <p>{breathMode ? "Respiro: selecciona los extremos de una cinta existente para retirarla. Solo un cambio; no se pueden añadir cintas." : "Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños."}</p>
+      <p>{completed ? "Turno terminado. El plano queda protegido para conservar la puntuación; usa Ajustar diseño para editar de nuevo." : breathMode ? "Respiro: selecciona los extremos de una cinta existente para retirarla. Solo un cambio; no se pueden añadir cintas." : "Selecciona dos postes vecinos para conectar o retirar una cinta. Usa las flechas para ajustar el poste sin tocar puntos pequeños."}</p>
     </div>
-    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={choose} onKeyDown={navigate} tabIndex={0} role="application" aria-label={`Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : breathMode ? "Respiro disponible: retira una sola cinta existente. Flechas y Enter para seleccionar postes." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
+    <canvas ref={ref} className={`game-canvas ${locked ? "inspection" : ""}`} onClick={completed ? undefined : choose} onKeyDown={completed ? undefined : navigate} tabIndex={completed ? -1 : 0} role={completed ? "img" : "application"} aria-label={completed ? "Plano final del turno, solo lectura. Usa Ajustar diseño en el resumen para volver a editar." : `Editor de postes y cintas. ${POST_COLS * POST_ROWS} postes por zona. ${locked ? "Turno bloqueado; selecciona los dos postes de una posible falla para marcarla." : breathMode ? "Respiro disponible: retira una sola cinta existente. Flechas y Enter para seleccionar postes." : "Usa las flechas para desplazarte, Enter para seleccionar y Av Pág o Re Pág para cambiar de zona."}`} />
   </>;
 }
 
@@ -555,7 +556,7 @@ export default function Home() {
   // Even before the first timer fires, do not permit a free midgame preset.
   const gameLocked = (sim.elapsed > 0 || sim.running) && !finished;
   const breathOpen = breathEditAvailable(roundId, sim.elapsed, sim.breathEdits, finished);
-  const layoutLocked = gameLocked && !breathOpen;
+  const layoutLocked = finished || (gameLocked && !breathOpen);
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
   const paceElapsed = scoredElapsed(roundId, sim.elapsed);
@@ -598,6 +599,9 @@ export default function Home() {
   useEffect(() => { if (isNewBest) safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }, [isNewBest, score, roundId]);
 
   function selectNode(grid: Grid, node: string) {
+    // Debrief scores refer to a frozen layout. Only the explicit
+    // "Ajustar diseño" transition may re-enable edits after finishing.
+    if (finished) { setSelected(null); return; }
     if (gameLocked) {
       if (!selected) { setSelected({ grid, node }); setMessage(breathOpen ? `Respiro: poste ${node} de ${grid ? "seguridad" : "migraciones"} seleccionado. Elige el otro extremo de una cinta existente para retirarla.` : `Inspección iniciada en el poste ${node} de ${grid ? "seguridad" : "migraciones"}. Selecciona el poste vecino.`); return; }
       if (selected.grid !== grid) { setSelected({ grid, node }); setMessage("Inspección trasladada a la otra zona."); return; }
@@ -737,7 +741,7 @@ export default function Home() {
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         {!finished && <button type="button" className="run mobile-run-early" onClick={run}>{sim.running ? "Ⅱ  Pausar turno" : sim.elapsed ? "▶  Reanudar turno" : "▶  Iniciar turno"}</button>}
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
-          <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} breathMode={breathOpen} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
+          <Board edges={displayEdges} agents={sim.agents} selected={selected} locked={layoutLocked} completed={finished} breathMode={breathOpen} elapsed={sim.elapsed} faults={sim.faults} onNode={selectNode} />
           <span className="zone upper">ZONA B · SEGURIDAD</span><span className="zone lower">ZONA A · MIGRACIONES</span>
           <span className={`flow-indicator ${flowMood}`} aria-live="polite"><i />{flowLabel}</span>
           {finished && <section ref={debriefRef} tabIndex={-1} role="region" aria-labelledby="gateflow-debrief-title" className="debrief">
