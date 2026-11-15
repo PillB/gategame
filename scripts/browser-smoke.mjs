@@ -137,7 +137,7 @@ try{
   // Speed up only the CI browser's wall clock. Simulation DT and seed remain unchanged.
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await send("Page.addScriptToEvaluateOnNewDocument",{source:
-    "const originalInterval=window.setInterval.bind(window);window.setInterval=(fn,ms,...args)=>originalInterval(fn,Math.min(ms,10),...args);"});
+    "const originalInterval=window.setInterval.bind(window);window.__gateflowFreezeTimers=false;window.setInterval=(fn,ms,...args)=>originalInterval((...values)=>{if(!window.__gateflowFreezeTimers)fn(...values);},Math.min(ms,10),...args);"});
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await screenshot("01-desktop-build");
@@ -152,7 +152,14 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
+  // Run→Running must lock layout in the same render even at exact t=0.
+  // Freeze only the CI wall-clock dispatch, never the simulation DT or seed.
+  await evaluate("window.__gateflowFreezeTimers=true");
   await clickButton("Iniciar turno");
+  assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
+  assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
+    "The player must not edit the preset at zero elapsed time in a running turn");
+  await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
   await sleep(200);
