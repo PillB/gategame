@@ -100,6 +100,7 @@ No asignar «ganó A/B» hasta tener consentimiento, participantes y resultados 
 
 ## Semáforo del corte actual
 
-- **Implementado en draft**: R04 y R05 con horario anunciado, registro de aterrizajes, selector accesible, score/récord separado por misión, URL con `round`+`rules`, tests de llegada/conservación/replay/compartir. El reloj de puntuación ahora descuenta solamente el desfase del **último** vuelo frente al horario clásico (manteniendo el tiempo real a la vista); ver prueba de regresión de los seis mapas.
-- **Diseñado, no jugable**: R06–R39 y M03–M24. Las historias anteriores no deben aparecer como niveles desbloqueados.
-- **Falta**: auditar el nuevo capture-per-tick en Chrome de CI (un JPEG y una fila NDJSON por 0,1 s para R04/R05), inspección visual de las capturas, prueba física móvil y accesibilidad, ensayo humano, calibración subjetiva del score neto frente a distintos horarios, decisión del dueño.
+- **Publicado solo en el espejo público temporal**: R04/R05, con 985 imágenes de 0,1 s, ledger aritmético y Browser CI del SHA `2607d878` (PR #13). Site privada intacta.
+- **Candidato en draft PR #17, no publicado**: R06 tiene cuatro vuelos a 0/7/27/34 s, una pausa de llegadas y un solo permiso para **retirar** una cinta desde el segundo 14. No caduca ni bloquea la pausa del jugador. En Serpentina, quitar SEG `4:9→5:9` eleva **833→852**, pero otras decisiones bajan a **807**. No premiar clics sin beneficio de flujo. R05 también corrige la etiqueta `ajuste +6,28 s` al inicio sin tocar matemáticas. CI/Chrome de la versión nueva sigue pendiente.
+- **Solo diseñado**: R07–R39 y los demás mecanismos M03–M24 no materializados en R06. No presentarlos como desbloqueados.
+- **Falta**: Chrome/capturas y control exacto del respiro, revisión de pruebas en dispositivos reales y lectores de pantalla, 5–8 personas para aceptación y evidencia de disfrute; la preparación de 128 semillas no es un A/B con usuarios.

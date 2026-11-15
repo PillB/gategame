@@ -23,12 +23,12 @@ button:focus-visible { outline:2px solid var(--acid); outline-offset:3px; }
 .hero>p { max-width:620px; margin:0 0 3px; color:#a7b1b7; font-size:clamp(15px,1.5vw,19px); line-height:1.65; }
 .hero strong { color:var(--paper); }
 .metrics { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#ffffff05; }
-.metrics article { min-height:96px; padding:19px 23px; display:grid; grid-template-columns:1fr auto; align-items:start; border-right:1px solid var(--line); }
+.metrics article { min-height:96px; padding:19px 23px; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; gap:7px; min-width:0; border-right:1px solid var(--line); }
 .metrics article:last-child { border:0; }
 .metrics span { color:#77858d; text-transform:uppercase; font:700 9px/1.4 var(--font-mono); letter-spacing:.14em; }
-.metrics strong { grid-column:1; font:500 29px/1.1 var(--font-mono); letter-spacing:-.05em; }
+.metrics strong { max-width:100%; font:500 29px/1.1 var(--font-mono); letter-spacing:-.05em; }
 .metrics em { color:#64717a; font-size:15px; font-style:normal; }
-.metrics small { grid-column:2; grid-row:2; align-self:end; color:#65727a; font:500 10px var(--font-mono); }
+.metrics small { align-self:flex-start; max-width:100%; overflow-wrap:anywhere; color:#65727a; font:500 10px var(--font-mono); }
 .metrics .score { background:var(--acid); color:var(--ink); }
 .metrics .score span,.metrics .score small { color:#0d14189f; }
 .metrics .score strong { font-weight:750; }
@@ -196,6 +196,9 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
 .flight-timeline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
 .flight-timeline span{border:1px solid #67867b;border-radius:5px;padding:3px 7px;color:#b5c9c1;font:600 10px var(--font-mono)}
 .flight-timeline span.landed{border-color:#d9ff5470;background:#d9ff541b;color:#e0ffb1}
+.breath-banner{display:flex;align-items:center;justify-content:space-between;gap:10px 22px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid #5a6897;background:#1a2034;color:#d7dff7;font-size:12px}
+.breath-banner strong{color:#c8d6ff;font:700 11px var(--font-mono);letter-spacing:.05em}
+.breath-banner span{max-width:690px;line-height:1.5}
 @media(max-width:720px){.round-picker{width:100%}.round-picker button{flex:1 1 130px;min-height:40px}.flight-board{grid-template-columns:1fr;padding:12px}.flight-board>small,.flight-timeline{grid-column:1}}
 /* Score change is a learning signal, never an extra hidden reward. */
 .round-delta{margin:8px 0 0;padding:8px 10px;border-radius:7px;border:1px solid #526971;background:#23363b;color:#e2eef2;font-size:12px;line-height:1.5}
@@ -228,4 +231,45 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .mobile-post-actions button{min-height:44px;padding:8px 10px;border:1px solid #637983;border-radius:8px;background:#2e4750;color:#f2fbfc;font:700 12px var(--font-mono)}
   .mobile-post-actions .select-post{background:#d9ff54;color:#15201c;border-color:#d9ff54}
   .mobile-post-controls p{grid-column:1/-1;margin:0;font-size:11px;line-height:1.45;color:#d2e0e5}
+}
+
+/* Put the launch action before the two tall playfield zones on mobile;
+   retain the below-board control for players editing from the bottom. */
+.mobile-run-early{display:none}
+@media(max-width:720px){
+  .mobile-run-early{display:block;width:100%;min-height:48px;border-radius:0;box-shadow:none;border-top:1px solid #d9ff5470}
+}
+/* Every phone-sized score card must stack its clock and caption. The generic
+   grid placed the long R06 adjustment at column 2, overlapping the clock in
+   375-412px screenshots although neither control was horizontally offscreen. */
+@media(max-width:720px){
+  .metrics article{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;min-width:0}
+  .metrics article>span,.metrics article>strong,.metrics article>small{max-width:100%;min-width:0;overflow-wrap:anywhere}
+  .metrics article>small{align-self:flex-start}
+}
+@media(max-width:300px){
+  .hero h2{font-size:29px;line-height:1.02;letter-spacing:-.055em}
+}
+
+/* Small-window directional controls: avoid the 138px D-pad + 125px actions
+   overflowing a 280px folded/zoomed viewport. Keep 44px minimum targets. */
+@media(max-width:340px){
+  .top-actions{flex-wrap:wrap}
+  .top-actions i{min-width:0;max-width:100%;white-space:normal}
+  .top-actions button{min-width:0;white-space:normal;flex:1 1 auto}
+  .metrics article{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:10px;min-width:0}
+  .metrics strong{font-size:20px}
+  .metrics small,.toolbar .label,.debrief-copy .label{overflow-wrap:anywhere;min-width:0}
+  .pace,.presets{display:grid;grid-template-columns:minmax(0,1fr);width:100%;gap:5px}
+  .pace button,.presets button{min-width:0;width:100%;white-space:normal;overflow-wrap:anywhere}
+  .mobile-post-controls{grid-template-columns:minmax(0,1fr)}
+  .mobile-post-dpad{grid-column:1;justify-content:center}
+  .mobile-post-actions{grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+  .mobile-post-actions button{min-width:0;overflow-wrap:anywhere}
+  .mobile-post-control-heading{min-width:0}
+  .mobile-post-control-heading output{overflow-wrap:anywhere}
+  .debrief{grid-template-columns:minmax(0,1fr)}
+  .grade{width:56px;height:56px;font-size:31px}
+  .debrief-copy,.medals,.score-ledger,.next-experiment,.debrief-actions{min-width:0}
+  .medals{grid-template-columns:minmax(0,1fr)}
 }

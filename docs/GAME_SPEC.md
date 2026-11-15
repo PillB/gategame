@@ -19,9 +19,21 @@ The game should support the loop **understand → design → predict → simulat
 
 Passenger transition: `grid1 → choice1 → walk1 (when changing lanes) → queue1 → service1 → grid2 → choice2 → walk2 (when changing lanes) → queue2 → service2 → done`, with terminal branches `turnedAway`, `left`, `failed`. Immigration failures cannot enter security. All agents must reach exactly one terminal state; no duplication or disappearance.
 
+### Immutable debrief result and explicit return to editing (SM-20)
+
+The last tick's score, fingerprint, and share link must describe the **same** starting layout and legal mid-round edit decisions. While the debrief is visible, a click on the underlying canvas or precision D-pad must never alter `edges`; the canvas is read-only and removed from keyboard navigation. Only an explicit action such as `Ajustar diseño`, mission choice or preset returns to editable state (with fresh simulation counters). This guards against a completed score being copied after someone changes the board without a rerun. The [state diagram](./STATE_MACHINES.md) and [SM-20 browser negative test](./STATE_MACHINE_AUDIT_LEDGER.md) capture the independent oracle.
+
+### R06 refinement and operational lifecycle (candidate, not released)
+
+R06 extends the Build/Run/Pause contract by permitting **one removal of a belt that is actually visible** after `elapsed >= 14.0` and before completion. It is optional and has no expiring deadline. A worker fault that already opened or rotated away a belt cannot consume the token. When the browser tab becomes hidden, the new candidate pauses the running simulation; resumption is an explicit user action. These candidate behaviors must be verified on the exact tested SHA.
+
+For the full nested lifecycle, queue walks, staff faults, challenge state and release gates, see [state diagrams](./STATE_MACHINES.md) and [negative-test ledger](./STATE_MACHINE_AUDIT_LEDGER.md). Do not model every derived boolean (finished, rank, score, layoutLocked) as an independent state: they must be derived from authoritative counters and current rules.
+
 ## Mathematical specification
 
 At time `t`, let `spawned = active + cleared + failed + turnedAway + abandoned`. For a completed run `spawned = 28` and all 28 are terminal; no passenger is counted twice. Time advances in deterministic steps of `DT = 0.1` simulation seconds; speed buttons change *wall-clock* interval, not the simulated outcomes. Passenger event selection, layout fingerprint, arrivals, patience and worker characteristics are seeded, reproducible under identical configuration.
+
+**Canonical directed-post state:** each connection has precisely two canonical integer post identifiers `x:y`, cardinal neighbors, at most one outgoing per source and one incoming per destination. Regardless of direction, only **one belt may occupy a physical unordered pair** of adjacent posts. A reciprocal double A→B and B→A is forbidden because it duplicates a single obstruction. A single reverse direction is valid on its own: it affects future directed connection availability, though both orientations block the same corridor. Imported/shared layouts with coordinate aliases (leading zeros, decimal/scientific notation, trailing spaces) must be rejected before routing. See the [canonical-layout state diagram](./STATE_MACHINES.md) and [SM-17/18 negative tests](./STATE_MACHINE_AUDIT_LEDGER.md).
 
 Post lattices contain `15 × 12 = 180` posts each, `360` across two zones. Traversable corridor cell lattices contain `14 × 11 = 154` cells each. A* paths traverse cardinal neighbor cells. A horizontal post belt at interior post row `y` blocks the cardinal *vertical* crossing between corridor rows `y-1` and `y`; a vertical belt at interior post column `x` blocks the corridor *horizontal* crossing between columns `x-1` and `x`. Border belts do not block an interior corridor crossing. Claims like “5.1× density” are **not specified** until a numerator, denominator and baseline are documented and independently calculated; the literal must not appear in player-facing UI in the meantime.
 
