@@ -173,6 +173,29 @@ try{
   await evaluate("delete document.visibilityState;document.dispatchEvent(new Event('visibilitychange'))");
   await clickButton("Reiniciar turno");
   await fullRound("División guiada","02-guided");
+  // Finished is a read-only snapshot. Otherwise the debrief can retain an old
+  // score while a new layout fingerprint is silently edited behind the panel.
+  const finishedFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  const finishedScore = await evaluate("document.querySelector('.debrief-copy strong')?.textContent");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"img",
+    "Completed canvas must cease being an interactive editing surface");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.tabIndex"),-1,
+    "Keyboard focus must not enter a hidden finished-round canvas editor");
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),true,
+    "Precise-post control must not edit a completed score");
+  const clickFinishedPost = async (x) => {
+    const expr="(()=>{const c=document.querySelector('.game-canvas'),b=c.getBoundingClientRect();"+
+      "const x="+x+",y=10,px=52+x*58+(y-5.5)*1.8,py=1160-(11-y)*40;"+
+      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:b.left+px/920*b.width,clientY:b.top+py/1240*b.height}));return true;})()";
+    await evaluate(expr);
+    await sleep(40);
+  };
+  await clickFinishedPost(0);
+  await clickFinishedPost(1);
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),finishedFingerprint,
+    "Late post edits corrupted the completed layout fingerprint and challenge provenance");
+  assert.equal(await evaluate("document.querySelector('.debrief-copy strong')?.textContent"),finishedScore,
+    "Late post edits must not leave the score bound to a different layout");
   const decisions = await evaluate("([...document.querySelectorAll('.ops-counters span')].map(e=>e.textContent))");
   assert.ok(decisions.some(x=>/decisiones de quedarse/.test(x)),"Queue-stay choices are hidden from the player");
   const counts = decisions.filter((x)=>/cambios de fila|decisiones de quedarse/.test(x)).map((x)=>{
@@ -288,6 +311,10 @@ try{
     }
   }
   await clickButton("Ajustar diseño");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"application",
+    "Only the explicit Finished → Editing transition may re-enable the canvas");
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),false,
+    "Post editing must become available again after leaving the debrief");
   const missionCases=[
     ["Turno clásico","Turno clásico",0],
     ["R04 · Las maletas cantoras","R04",4],
