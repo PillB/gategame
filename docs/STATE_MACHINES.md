@@ -54,6 +54,27 @@ stateDiagram-v2
 
 **Guards and contracts.** `finished` derives from terminal passenger counters, not an independent flag. `gameLocked` is derived from `sim.elapsed`, `sim.running`, and `finished`; R06 removal is an explicit guarded exception. A reset preserves the current belt configuration but clears the run/token. Merely changing pace is **not** supposed to change outcomes. `document.visibilityState=hidden` pauses to avoid time advancement under background timer throttling. The debrief receives keyboard focus on completion; a real focus-trap/screen-reader audit remains open.
 
+#### Finished-state read-only invariant (SM-20)
+
+```mermaid
+stateDiagram-v2
+  state Editing {
+    [*] --> SelectPost
+    SelectPost --> ChangeBelts: valid cardinal edit
+    ChangeBelts --> SelectPost
+  }
+  Editing --> Running: Start / snapshot starting layout
+  Running --> Paused: Pause
+  Paused --> Running: Resume
+  Running --> Debrief: 28 final passenger outcomes
+  Debrief --> Debrief: inspect score / copy / native share
+  Debrief --> Debrief: post selection / canvas click [forbidden and ignored]
+  Debrief --> Editing: Ajustar diseño / reset
+  Debrief --> Editing: choose different mission or preset
+```
+
+The completed `score` and `layout fingerprint` are a single immutable *result snapshot*. A post edit directly from Debrief previously bypassed the intended `Ajustar diseño` transition because `gameLocked` became false at completion while the result panel remained visible. The board is now non-interactive in Debrief: disabled precise controls, unfocusable static canvas and an additional guard in `selectNode`. This is intentionally **not** an edit history/undo feature. The browser counterexample dispatches two well-formed post clicks after completion and demands an unchanged fingerprint and score; clicking `Ajustar diseño` must then restore editability. Valid mission/preset changes already reset the completed `sim` and remain available.
+
 ### S1. Passenger phase and retry automaton (28 independent agents)
 
 ```mermaid
