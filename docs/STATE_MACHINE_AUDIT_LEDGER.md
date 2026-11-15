@@ -33,6 +33,8 @@ As-of **14 Nov 2026**. Scope: candidate `feature/r06-breath-and-clock-clarity` (
 
 Evidence sources: [OWASP input validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html) for canonical representation at boundaries; [statechart guards](https://statecharts.dev/glossary/guard.html) for pure, synchronous transition predicates; [WCAG keyboard and target size](https://www.w3.org/TR/wcag/) for alternate precise controls; [Playwright assertions](https://playwright.dev/docs/test-assertions) for real-rendered feedback. These references guide design decisions but do not claim human/physical-device test evidence.
 
+| SM-20 | P0 · FIXED IN CANDIDATE / CURRENT CI PENDING | `gameLocked = (elapsed>0 || running) && !finished` unlocked post edits when the debrief appeared; `selectNode` could then modify `edges` while `sim` score and `finished` stayed unchanged. This corrupts the score/fingerprint correlation and could share a layout that was **never scored**. | Browser finishes Guided, records fingerprint and score, dispatches two adjacent valid post clicks into the result canvas and verifies neither changes; canvas is static, D-pad select disabled. Then `Ajustar diseño` restores the interactive canvas and post controls. Remove the new finish guard as a mutant: the fingerprint oracle must fail. | Keep legitimate preset/mission changes (they already reset the simulation). No animation/score change; one extra guarded UI state, not a new server model. |
+
 ## Four red-team rounds, deliberately distinct
 
 | Round | Attack surface | Expected falsifier | Current standing |
