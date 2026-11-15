@@ -11,6 +11,26 @@ Audited 14 November 2026 from the R06 candidate in PR #17. This is a *source-der
 - There is **no slide deck** (`.ppt`, `.pptx`, or slide-output directory) in the inspected tracked tree. Visual evidence is GitHub Actions screenshots, not slides.
 - Runtime domains: `app/page.tsx` React UI + engine, `lib/simulation.js` geometry/routing/score/queue selection, `lib/rounds.js` wave schedules/guards, `lib/challenges.js` share contract; static Pages `src/main.tsx`, original Sites Worker `worker/index.ts`. `db/index.ts` is optional D1 scaffold, not a current gameplay transaction boundary.
 
+### S-1. Canonical layout import and physical-belt uniqueness (new negative-test state)
+
+```mermaid
+flowchart TD
+  A[User edits or imports layout] --> B{Canonical integer post IDs in bounds?}
+  B -->|No: alias, decimal or malformed| R[Reject invalid layout; do not create challenge]
+  B -->|Yes| C{Endpoints cardinal and directed degree valid?}
+  C -->|No| R
+  C -->|Yes| D{One physical belt per unordered post pair?}
+  D -->|No: A→B plus B→A| R
+  D -->|Yes| E[Accept validated layout]
+  E --> F[Share / store / run deterministic physics]
+  F --> G[Route blocked crossings and draw belts]
+  R --> H[Fallback to valid saved/default design]
+```
+
+**Failure mechanism found 14 November:** an original `A→B` plus reversed `B→A` passed directed one-in/one-out checks while rendering and blocking the **same** physical segment twice. Imported post strings such as `01:1` could parse to a numeric post but could not be selected by the canonical canvas node `1:1`. Both are invalid states. New entry guards use canonical `nodeId(x,y)` equality and an **unordered physical edge key**; a single A→B or B→A is still valid by itself because directed endpoint ownership remains a real editing constraint.
+
+**Trade-off:** malformed legacy imported layouts are **rejected**, not silently repaired, to avoid mutating challenge geometry and score provenance. Existing valid G1 layouts, round rules and seeds retain their original meaning. Negative oracle: traversability with [A→B] must equal traversability with [A→B,B→A], so the latter must never become an independently accepted game state. Exhaustively test 40 segments in a 5×5 lattice, plus a deliberately malformed URL in the real browser.
+
 ### S0. Overall player session: guard-driven, not a collection of unrelated buttons
 
 ```mermaid
