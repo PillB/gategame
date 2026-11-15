@@ -59,6 +59,26 @@ test("reverse belts cannot duplicate one physical obstruction or forge a differe
   assert.deepEqual(addConnection([belt], belt.from, belt.to, 5, 5), []);
 });
 
+test("all cardinal links on a small lattice have a single physical identity", () => {
+  // Enumerate every north/south and east/west link rather than hard-coding a
+  // single regression pair. The reverse is a *valid standalone* layout, not a
+  // second belt when the original is already present.
+  let seen = 0;
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      if (x + dx >= 5 || y + dy >= 5) continue;
+      const belt = { from: `${x}:${y}`, to: `${x + dx}:${y + dy}` };
+      const reverse = { from: belt.to, to: belt.from };
+      assert.deepEqual(decodeLayout(encodeLayout([[belt], []], 5, 5), 5, 5), [[belt], []]);
+      assert.deepEqual(decodeLayout(encodeLayout([[reverse], []], 5, 5), 5, 5), [[reverse], []]);
+      assert.throws(() => addConnection([belt], reverse.from, reverse.to, 5, 5), /dirección contraria/);
+      assert.equal(sanitizeLayoutGroups([[belt, reverse], []], 5, 5), null);
+      seen += 1;
+    }
+  }
+  assert.equal(seen, 40, "A 5 by 5 post lattice contains 40 distinct cardinal segments");
+});
+
 test("imported post coordinates must be canonical integers, not invisible aliases", () => {
   const belt = { from: "1:1", to: "2:1" };
   const invalid = [
