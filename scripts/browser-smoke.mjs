@@ -161,6 +161,8 @@ try{
   await clickButton("Reiniciar turno");
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
   await fullRound("División guiada","02-guided");
+  await waitFor("document.activeElement?.classList.contains('debrief')",3000);
+  assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
   // Counterfactual: before the fix, two valid post clicks could mutate
   // the finished layout while leaving the old debrief score visible.
   const finishedFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
