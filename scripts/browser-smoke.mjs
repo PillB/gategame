@@ -131,7 +131,7 @@ try{
   // Speed up only the CI browser's wall clock. Simulation DT and seed remain unchanged.
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await send("Page.addScriptToEvaluateOnNewDocument",{source:
-    "const originalInterval=window.setInterval.bind(window);window.setInterval=(fn,ms,...args)=>originalInterval(fn,Math.min(ms,10),...args);"});
+    "const originalInterval=window.setInterval.bind(window);window.__gateflowFreezeTimers=false;window.setInterval=(fn,ms,...args)=>originalInterval((...values)=>{if(!window.__gateflowFreezeTimers)fn(...values);},Math.min(ms,10),...args);"});
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await screenshot("01-desktop-build");
@@ -146,7 +146,14 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
+  // Hold the CI-only wall-clock timer so the run is truly active at t=0.
+  // This catches the original bug that unlocked presets before the first tick.
+  await evaluate("window.__gateflowFreezeTimers=true");
   await clickButton("Iniciar turno");
+  assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
+  assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
+    "Live zero-tick turn must not allow a layout preset change");
+  await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
   await sleep(200);
@@ -154,9 +161,33 @@ try{
   await clickButton("Reiniciar turno");
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
   await fullRound("División guiada","02-guided");
+  await waitFor("document.activeElement?.classList.contains('debrief')",3000);
+  assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
+  // Counterfactual: before the fix, two valid post clicks could mutate
+  // the finished layout while leaving the old debrief score visible.
+  const finishedFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  const finishedScore = await evaluate("document.querySelector('.debrief-copy strong')?.textContent");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"img");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.tabIndex"),-1);
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),true);
+  for(const x of [0,1]){
+    const expr="(()=>{const c=document.querySelector('.game-canvas'),r=c.getBoundingClientRect();"+
+      "const x="+x+",y=10,px=52+x*58+(y-5.5)*1.8,py=1160-(11-y)*40;"+
+      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:r.left+px/920*r.width,clientY:r.top+py/1240*r.height}));return true;})()";
+    await evaluate(expr);
+    await sleep(40);
+  }
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),finishedFingerprint,
+    "Completed score fingerprint must not change via background canvas clicks");
+  assert.equal(await evaluate("document.querySelector('.debrief-copy strong')?.textContent"),finishedScore);
+
   await evaluate("document.querySelector('.score-ledger summary')?.click()");
   await screenshot("03-score-ledger");
   await clickButton("Copiar desafío");
+  await clickButton("Ajustar diseño");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"application",
+    "Explicit edit transition must unlock the static board");
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),false);
   await fullRound("Serpentina","04-serpentine");
   await fullRound("Espacio libre","05-open-floor");
   await clickButton("R04 · Las maletas cantoras");
@@ -214,6 +245,17 @@ try{
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false);
+  // A reversed second encoding is a duplicate physical belt, not a new
+  // challenge with a different replayable arrangement.
+  const physicalA=1*15+1, physicalB=1*15+2, postCount=15*12;
+  const duplicateLayout="G1."+
+    (physicalA*postCount+physicalB).toString(36).toUpperCase()+"."+
+    (physicalB*postCount+physicalA).toString(36).toUpperCase();
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout="+duplicateLayout+"&beat=947"});
+  await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
+  await sleep(200);
+  assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false,
+    "Duplicate physical belts must not generate a comparable shared score");
   assert.equal(errors.length,0,errors.join("\n"));
   console.info("BROWSER_SMOKE_PASS commit="+JSON.parse(await readFile(path.join(root,"version.json"),"utf8")).sourceRevision);
 }finally{
