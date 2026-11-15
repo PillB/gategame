@@ -44,6 +44,39 @@ test("connections are cardinal and enforce one outgoing and one incoming edge", 
   assert.throws(() => addConnection([], "0:0", "1:1", 5, 5), /contiguos/i);
 });
 
+test("reverse belts cannot duplicate one physical obstruction or forge a different shared challenge", () => {
+  const belt = { from: "1:1", to: "2:1" };
+  const duplicate = { from: "2:1", to: "1:1" };
+  const both = [[belt, duplicate], []];
+  // Without this guard the two directed edges appear as two belts while both
+  // block exactly the same vertical corridor crossing: a causal no-op.
+  assert.equal(isCorridorStepBlocked("1:0", "1:1", [belt], 5, 5), true);
+  assert.equal(isCorridorStepBlocked("1:0", "1:1", [belt, duplicate], 5, 5), true);
+  assert.throws(() => addConnection([belt], duplicate.from, duplicate.to, 5, 5), /dirección contraria/i);
+  assert.equal(sanitizeLayoutGroups(both, 5, 5), null);
+  assert.throws(() => encodeLayout(both, 5, 5), /no válida/i);
+  // The existing same-direction toggle remains a supported edit.
+  assert.deepEqual(addConnection([belt], belt.from, belt.to, 5, 5), []);
+});
+
+test("imported post coordinates must be canonical integers, not invisible aliases", () => {
+  const belt = { from: "1:1", to: "2:1" };
+  const invalid = [
+    { from: "01:1", to: "2:1" },
+    { from: "1:1", to: "2:01" },
+    { from: "1.5:1", to: "2.5:1" },
+    { from: "1e0:1", to: "2:1" },
+    { from: "1:1 ", to: "2:1" },
+  ];
+  for (const edge of invalid) {
+    assert.equal(sanitizeLayoutGroups([[edge], []], 5, 5), null,
+      "Noncanonical saved post would not map to an editable canvas node");
+    assert.throws(() => addConnection([], edge.from, edge.to, 5, 5),
+      /fuera de la cuadrícula|canónicas/i);
+  }
+  assert.deepEqual(sanitizeLayoutGroups([[belt], []], 5, 5), [[belt], []]);
+});
+
 test("A* finds a shortest route to the nearest open top-row exit", () => {
   const route = findRoute({ cols: 4, rows: 4, start: "2:3", connections: [
     { from: "1:2", to: "1:1" }, { from: "2:2", to: "2:1" }, { from: "3:2", to: "3:1" },
