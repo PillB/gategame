@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeRound, parseChallengeScore } from "@/lib/challenges.js";
-import { arrivalAt, breathEditAvailable, canRemoveLiveBelt, DEFAULT_ROUND, getRound, paceClockCaption, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
+import { arrivalAt, breathEditAvailable, canRemoveLiveBelt, DEFAULT_ROUND, formatTickClock, getRound, paceClockCaption, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
 
 const POST_COLS = 15;
@@ -263,7 +263,7 @@ function tick(state: Sim, edges: [Edge[], Edge[]], roundId = DEFAULT_ROUND): Sim
 }
 
 function timeLabel(seconds: number) {
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  return formatTickClock(seconds);
 }
 
 const BOARD_W = 920;
