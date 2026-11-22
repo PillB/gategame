@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ROUNDS, arrivalAt, canRemoveLiveBelt, getRound, paceClockCaption, scoredElapsed, upcomingWave } from "../lib/rounds.js";
+import { ROUNDS, arrivalAt, canRemoveLiveBelt, formatTickClock, getRound, paceClockCaption, scoredElapsed, upcomingWave } from "../lib/rounds.js";
 
 const document = readFileSync(new URL("../docs/DELIGHT_LEDGER.md", import.meta.url), "utf8");
 
@@ -97,4 +97,25 @@ test("R06 only permits spending respiro on a belt currently visible", () => {
     "A rotated-belt fault cannot consume the one-time removal");
   assert.equal(canRemoveLiveBelt(original,original,"4:9","6:9"),false,
     "A pair that was never linked cannot consume the edit");
+});
+
+test("visible clock agrees with deterministic tenths at flight and respiro boundaries", () => {
+  // Independent integer tick oracle; this deliberately uses repeated 0.1s
+  // additions like the REAL engine, rather than clean i / 10 values.
+  let elapsed = 0;
+  for (let tick = 0; tick <= 1200; tick += 1) {
+    const expected = `${String(Math.floor(tick / 600)).padStart(2, "0")}:${String(Math.floor(tick / 10) % 60).padStart(2, "0")}`;
+    assert.equal(formatTickClock(elapsed), expected, `clock drift at tick ${tick}: ${elapsed}`);
+    if ([70, 90, 110, 140, 220, 270, 330, 340, 600].includes(tick)) {
+      assert.equal(formatTickClock(elapsed), expected, `advertised flight / mechanic boundary ${tick}`);
+    }
+    elapsed += 0.1;
+  }
+  assert.throws(() => formatTickClock(-0.1), /inválido/i);
+  assert.throws(() => formatTickClock(NaN), /inválido/i);
+  assert.equal(formatTickClock(59.99999999999), "01:00");
+  assert.equal(formatTickClock(59.98), "00:59", "display correction must not round real hundredths");
+  // A scored clock is a separate view and must use exactly the same formatter.
+  const r05Offset = arrivalAt("r05", 27) - arrivalAt("classic", 27);
+  assert.match(paceClockCaption("r05", 60 + r05Offset - 1e-12), /puntuable 01:00/);
 });
