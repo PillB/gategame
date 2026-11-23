@@ -164,6 +164,10 @@ async function audit({ roundId, button, preset, layout:sourceLayout, breathRemov
         "One-time passage must be announced before use");
       assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
         "Midgame passage must never unlock unrestricted preset changes");
+      assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
+        "R06 belt token cannot be bypassed via preflight Undo");
+      assert.equal(await evaluate("document.querySelector('.route-preview')"),null,
+        "A* workshop estimates must not be presented as live fault-adjusted paths");
       const before=await evaluate("document.querySelector('.toolbar .label')?.textContent");
       await pressPost("Cambiar zona del plano");
       await pressPost("Mover al poste de arriba",2);
