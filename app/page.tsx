@@ -767,7 +767,7 @@ export default function Home() {
           <span>{routePreview.blocked
             ? `${routePreview.blocked} entradas sin ruta hasta control; sus pasajeros intentarán otra entrada.`
             : "Todas las entradas tienen al menos una ruta hasta control."}
-            {" "}Ruta más corta media entre entradas conectadas: {routePreview.meanSteps === null ? "sin rutas" : routePreview.meanSteps.toLocaleString("es-PE", { maximumFractionDigits: 1 }) + " casillas"}.</span>
+            {" "}Rodeos acumulados en las rutas conectadas: <b>{routePreview.extraSteps} {routePreview.extraSteps === 1 ? "paso adicional" : "pasos adicionales"}</b>.</span>
           <small>Solo considera cintas del diseño, no fallas temporales. No predice esperas, relevos, paciencia ni puntuación.</small>
         </section>}
         <div className="scenario-banner"><span>{round.badge}</span><b>{round.title} · {POST_COLS * POST_ROWS} postes por zona</b><small>{round.story} {round.decision}</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
