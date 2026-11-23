@@ -197,6 +197,8 @@ try{
     "The player must not edit the preset at zero elapsed time in a running turn");
   assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
     "Preflight Undo must not bypass the scored-run layout lock");
+  assert.equal(await evaluate("document.querySelector('.route-preview')"),null,
+    "Preflight preview must not masquerade as live routing after start");
   await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
