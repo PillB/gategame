@@ -482,6 +482,20 @@ try{
   await sleep(200);
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"), false,
     "Reciprocal duplicate geometry must not create a comparable challenge");
+  // Choosing a new preset explicitly exits the challenge, including its URL.
+  // Otherwise the stale query silently re-imports the friend's layout on reload.
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
+  await waitFor("!!document.querySelector('.challenge-ribbon')");
+  await clickButton("Serpentina");
+  const leftChallenge = await evaluate("({temporary:!!document.querySelector('.temporary-layout-note'),challenge:!!document.querySelector('.challenge-ribbon'),urlHasLayout:new URL(location.href).searchParams.has('layout')})");
+  assert.deepEqual(leftChallenge,{temporary:false,challenge:false,urlHasLayout:false},
+    "Preset exit left challenge state or URL provenance stale");
+  const exitLayout = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  await send("Page.reload",{ignoreCache:true});
+  await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
+  await waitFor("document.querySelector('.toolbar .label')?.textContent==="+JSON.stringify(exitLayout));
+  assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false,
+    "Reload unexpectedly reopened an exited challenge");
   assert.equal(errors.length,0,errors.join("\n"));
   console.info("BROWSER_SMOKE_PASS commit="+JSON.parse(await readFile(path.join(root,"version.json"),"utf8")).sourceRevision);
 }finally{
