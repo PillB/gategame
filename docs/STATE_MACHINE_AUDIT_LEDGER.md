@@ -79,3 +79,12 @@ Architecture references: [state diagrams](./STATE_MACHINES.md), [engineering con
 4. **Release:** inspect exact run and artifacts, diff against `main`, formal independent review and physical UAT; publish only an accepted source revision.
 
 No experimental preference, engagement or virality claims may be inferred from static code or robot browser tests. Use short sessions with 5–8 uncoached novices and pre-specified success criteria before declaring gameplay perfected.
+
+
+## Additional first-use data-integrity red team — 22 Nov 2026
+
+| ID | Priority / status | Root cause | Counterfactual acceptance and trade-off |
+| --- | --- | --- | --- |
+| SM-26 | P1 · IMPLEMENTED IN DRAFT, exact-SHA CI PENDING | Challenge link hydrate called `editLayout(load)`; the later `storageReady` effect immediately persisted challenge geometry to `gateflow-layout-v2`, overwriting the player's previous personal saved map. This was an implicit, destructive transition unrelated to their intent to play a friend. | A sentinel personal layout must survive opening/editing a valid shared G1 URL, including a mission-versioned R04 link. Only explicit `Guardar este plano` may replace personal storage. `Volver a mi plano` restores canonical saved geometry, clears result/challenge provenance and removes challenge query params. **Trade-off:** temporary challenge edits are intentionally not recoverable after refreshing unless the player explicitly saves; UI labels this. Test via hosted real browser, not merely `source.includes()`. |
+
+Impacts: `Home` hydration, localStorage save effect, preset transition, score-fingerprint challenge lifecycle, and first-use browser test. No database connection pooling, outbox, or remote optimistic locking is relevant to this browser-local fix. Physical device and two-tab synchronization remain separate unresolved gates.
