@@ -238,3 +238,27 @@ The public repository has no active DB writes, brokers, or multi-user shared mut
 - Keyboard focus not obscured: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum
 
 See [audit ledger](./STATE_MACHINE_AUDIT_LEDGER.md) for hypotheses, failure oracles, and release status.
+
+
+## S6. Reversible preflight design workshop (candidate added 22 Nov 2026)
+
+```mermaid
+stateDiagram-v2
+  [*] --> NoHistory: initial layout validated
+  NoHistory --> UndoAvailable: valid post-pair edit / push prior layout
+  UndoAvailable --> RedoAvailable: Undo / move current to future
+  RedoAvailable --> UndoAvailable: Redo / restore future geometry
+  RedoAvailable --> UndoAvailable: new edit / drop divergent future
+  UndoAvailable --> NoHistory: preset, imported layout, mission reset or start
+  RedoAvailable --> NoHistory: preset, imported layout, mission reset or start
+  NoHistory --> NoHistory: invalid/no-op edit rejected
+  UndoAvailable --> UndoAvailable: max 20 history snapshots / discard oldest
+  NoHistory --> RunningLocked: Start simulation
+  RunningLocked --> NoHistory: Reset or end-of-round tuning
+```
+
+The **authoritative geometry** is `layoutEditor.edges`, not an unrelated canvas copy. `layoutWorkshopReducer` applies validated immutable editing transactions, bounded undo and redo. `load` resets all history (including the mid-turn R06 belt removal), preventing the one-use token from being undone. `clear` preserves geometry but clears history for scored runs. The rendered `routePreview` is a pure `useMemo` over this geometry and enumerates 14 possible entry columns in **each** corridor. It reports reachability and shortest-path length; it deliberately does not claim future queue waits or scores. Faulted belts during play are separately derived through `effectiveEdges`, so the workshop preview describes **base geometry** rather than forecasting worker faults.
+
+A counterexample matters: one horizontal border belt visually exists but blocks zero interior corridor crossings, so the preview must stay exactly the same as an empty map. An interior full-row wall blocks 14/28 entry routes; opening one gap reconnects all 28 but increases average shortest-path length. Test both against actual A* in `tests/layout-workshop.test.mjs`, not against the number of belts. The Chrome first-use test makes a belt, checks a real preview change, undoes it, redoes it and restores the original fingerprint before running the original seeded score baseline. R06 live-edit and finished-state invariants remain separate gates.
+
+**Scope of proof:** source and hosted Chromium tests only when green on the exact SHA; full iPhone accessibility and a human novice's comprehension remain unverified. Implementation references: `lib/layout-workshop.js`, `app/page.tsx`, `scripts/browser-smoke.mjs`. Progressive, contextual feedback rather than forced tutorial overlays follows [NN/g progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) and [NN/g onboarding guidance](https://www.nngroup.com/articles/onboarding-tutorials/). The alternative 44px mobile controls align with WCAG's equivalent-target and enhanced target-size guidance; this is not native VoiceOver certification.
