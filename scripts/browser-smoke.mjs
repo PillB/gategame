@@ -442,7 +442,17 @@ try{
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947') && document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')");
   assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout);
   await screenshot("10-round-shared-challenge");
-  // Only an explicit "Guardar" authorizes replacing the personal saved map.
+  // Explicit saves must fail visibly if browser privacy settings deny writes.
+  await evaluate("window.__nativeSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('blocked','SecurityError')}");
+  await clickButton("Guardar este plano");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/No se pudo guardar/,
+    "An unsuccessful save must not tell the player it succeeded");
+  assert.equal(await evaluate("!!document.querySelector('.temporary-layout-note')"),true,
+    "Denied save must keep the challenge temporary");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Denied save corrupted the original personal map");
+  await evaluate("Storage.prototype.setItem=window.__nativeSetItem");
+  // Only an explicit, successful "Guardar" authorizes replacing the saved map.
   await clickButton("Guardar este plano");
   await waitFor("localStorage.getItem('gateflow-layout-v2')==='[[],[]]'");
   assert.equal(await evaluate("document.querySelector('.temporary-layout-note')"),null,
