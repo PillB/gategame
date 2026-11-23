@@ -479,7 +479,8 @@ function safeWrite(key: string, value: string) {
 
 export default function Home() {
   const [layoutEditor, editLayout] = useReducer(layoutWorkshopReducer, GUIDED, createLayoutWorkshop);
-  const edges: [Edge[], Edge[]] = layoutEditor.edges;
+  // The reducer validates exactly two geometry groups at every transition.
+  const edges = layoutEditor.edges as [Edge[], Edge[]];
   const [roundId, setRoundId] = useState(DEFAULT_ROUND);
   const [storageReady, setStorageReady] = useState(false);
   const [sim, setSim] = useState<Sim>(blank);
