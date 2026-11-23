@@ -45,7 +45,7 @@ async function waitFor(js,maxMs=17000){
   throw Error("Timed out waiting for "+js);
 }
 async function clickButton(label){
-  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+"));if(!b||b.disabled)return false;b.click();return true})()";
+  const js="(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes("+JSON.stringify(label)+")&&x.getClientRects().length>0&&getComputedStyle(x).visibility!=='hidden');if(!b||b.disabled)return false;b.click();return true})()";
   assert.equal(await evaluate(js),true,"Button missing: "+label);
   await sleep(85);
 }
@@ -62,6 +62,10 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
   await screenshot(name+"-running");
   try {
     await waitFor("!!document.querySelector('section.debrief')",90000);
+    await waitFor("document.activeElement?.classList.contains('debrief')",3000);
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('role')"),"region",
+      "Debrief must be navigable as a named landmark without claiming an untrapped modal");
+    assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
   } catch (error) {
     console.error("BROWSER_TIMEOUT_DIAGNOSTICS "+JSON.stringify(await evaluate("(()=>({time:document.querySelector('.metrics article:first-child strong')?.textContent,header:document.querySelector('.top-actions')?.textContent,objective:document.querySelector('.objective')?.textContent.slice(0,250),errors:document.querySelector('.toolbar')?.textContent.slice(0,160)}))()")));
     await screenshot(name+"-timeout");
@@ -87,17 +91,19 @@ async function fullRound(preset,name,expectedCleared=25,expectedScore=null){
 }
 try{
   profile=await mkdtemp(path.join(tmpdir(),"gateflow-ci-"));
+  let chromeDiagnostics="";
   chrome=spawn(findChrome(),["--headless=new","--no-sandbox","--disable-dev-shm-usage",
     "--disable-gpu","--no-first-run","--disable-background-networking",
     "--remote-allow-origins=*","--remote-debugging-port=0",
-    "--user-data-dir="+profile,"about:blank"],{stdio:"ignore"});
+    "--user-data-dir="+profile,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+  chrome.stderr?.on("data",(chunk)=>{chromeDiagnostics=(chromeDiagnostics+String(chunk)).slice(-6000);});
   let port=0;
-  for(let i=0;i<120;i++){
+  for(let i=0;i<400;i++){
     try{port=Number((await readFile(path.join(profile,"DevToolsActivePort"),"utf8")).split("\n")[0]);if(port>0)break;}catch{}
-    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized");
+    if(chrome.exitCode!==null)throw Error("Chrome exited before CDP initialized. "+chromeDiagnostics);
     await sleep(100);
   }
-  if(!port)throw Error("CDP port not ready");
+  if(!port)throw Error("CDP port not ready after 40 seconds. "+chromeDiagnostics);
   const targets=await(await fetch("http://127.0.0.1:"+port+"/json")).json();
   const target=targets.find(t=>t.type==="page");
   assert.ok(target?.webSocketDebuggerUrl);
@@ -146,13 +152,53 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
-  // Hold the CI-only wall-clock timer so the run is truly active at t=0.
-  // This catches the original bug that unlocked presets before the first tick.
+  // A clear corridor is the mathematical control: a single interior belt
+  // increases the affected starting route length by two cells. Guided already
+  // has detours, so an arbitrary extra belt may correctly change no summary.
+  await clickButton("Espacio libre");
+  // A brand-new player sees a measurable, non-scoring A* access preview.
+  // One actual canvas edit must update that preview and be undoable; all
+  // metrics, model geometry and saved baseline must return after Undo.
+  const beforeWorkshop = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  const routeBefore = await evaluate("document.querySelector('.route-preview')?.textContent");
+  assert.ok(routeBefore.includes("28/28"), "Preflight access preview is not present on first visit");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
+    "Undo must be unavailable before any actual edit");
+  const tapWorkshopPost=async (x,y=10)=>{
+    const script="(()=>{const c=document.querySelector('.game-canvas'),b=c.getBoundingClientRect();"+
+      "const x="+x+",y="+y+",px=52+x*58+(y-5.5)*1.8,py=1160-(11-y)*40;"+
+      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:b.left+px/920*b.width,clientY:b.top+py/1240*b.height}));return true;})()";
+    await evaluate(script);await sleep(70);
+  };
+  await tapWorkshopPost(0);await tapWorkshopPost(1);
+  const afterWorkshop = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  assert.notEqual(afterWorkshop,beforeWorkshop,"The player's belt edit must modify real geometry");
+  assert.notEqual(await evaluate("document.querySelector('.route-preview')?.textContent"),routeBefore,
+    "A* access preview must react to a belt that changes a shortest route");
+  await clickButton("Deshacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),beforeWorkshop,
+    "Undo failed to restore the exact starting layout");
+  assert.equal(await evaluate("document.querySelector('.route-preview')?.textContent"),routeBefore,
+    "Undo left a stale preview");
+  await clickButton("Rehacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),afterWorkshop,
+    "Redo failed to restore the edited layout");
+  await clickButton("Deshacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),beforeWorkshop);
+  await clickButton("División guiada");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"), true,
+    "Changing preset must clear irrelevant Undo history");
+  // Run→Running must lock layout in the same render even at exact t=0.
+  // Freeze only the CI wall-clock dispatch, never the simulation DT or seed.
   await evaluate("window.__gateflowFreezeTimers=true");
   await clickButton("Iniciar turno");
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
   assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
-    "Live zero-tick turn must not allow a layout preset change");
+    "The player must not edit the preset at zero elapsed time in a running turn");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
+    "Preflight Undo must not bypass the scored-run layout lock");
+  assert.equal(await evaluate("document.querySelector('.route-preview')"),null,
+    "Preflight preview must not masquerade as live routing after start");
   await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
@@ -160,43 +206,190 @@ try{
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),paused);
   await clickButton("Reiniciar turno");
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
+  // A tab switch is an actual lifecycle transition, not a background score
+  // opportunity. Exercise the DOM event and assert the visible clock freezes.
+  await clickButton("Iniciar turno");
+  await waitFor("document.querySelector('.metrics article:first-child strong')?.textContent!=='00:00'");
+  await evaluate("Object.defineProperty(document,'visibilityState',{value:'hidden',configurable:true});document.dispatchEvent(new Event('visibilitychange'))");
+  await waitFor("document.querySelector('.top-actions')?.textContent.includes('en pausa')");
+  const hiddenClock = await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
+  await sleep(150);
+  assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),hiddenClock,
+    "Backgrounding advanced the player clock instead of automatically pausing");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/pausado automáticamente/);
+  await evaluate("delete document.visibilityState;document.dispatchEvent(new Event('visibilitychange'))");
+  await clickButton("Reiniciar turno");
   await fullRound("División guiada","02-guided");
-  await waitFor("document.activeElement?.classList.contains('debrief')",3000);
-  assert.equal(await evaluate("document.querySelector('.debrief')?.getAttribute('aria-labelledby')"),"gateflow-debrief-title");
-  // Counterfactual: before the fix, two valid post clicks could mutate
-  // the finished layout while leaving the old debrief score visible.
+  // Finished is a read-only snapshot. Otherwise the debrief can retain an old
+  // score while a new layout fingerprint is silently edited behind the panel.
   const finishedFingerprint = await evaluate("document.querySelector('.toolbar .label')?.textContent");
   const finishedScore = await evaluate("document.querySelector('.debrief-copy strong')?.textContent");
-  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"img");
-  assert.equal(await evaluate("document.querySelector('.game-canvas')?.tabIndex"),-1);
-  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),true);
-  for(const x of [0,1]){
-    const expr="(()=>{const c=document.querySelector('.game-canvas'),r=c.getBoundingClientRect();"+
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"img",
+    "Completed canvas must cease being an interactive editing surface");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.tabIndex"),-1,
+    "Keyboard focus must not enter a hidden finished-round canvas editor");
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),true,
+    "Precise-post control must not edit a completed score");
+  const clickFinishedPost = async (x) => {
+    const expr="(()=>{const c=document.querySelector('.game-canvas'),b=c.getBoundingClientRect();"+
       "const x="+x+",y=10,px=52+x*58+(y-5.5)*1.8,py=1160-(11-y)*40;"+
-      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:r.left+px/920*r.width,clientY:r.top+py/1240*r.height}));return true;})()";
+      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:b.left+px/920*b.width,clientY:b.top+py/1240*b.height}));return true;})()";
     await evaluate(expr);
     await sleep(40);
-  }
+  };
+  await clickFinishedPost(0);
+  await clickFinishedPost(1);
   assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),finishedFingerprint,
-    "Completed score fingerprint must not change via background canvas clicks");
-  assert.equal(await evaluate("document.querySelector('.debrief-copy strong')?.textContent"),finishedScore);
-
+    "Late post edits corrupted the completed layout fingerprint and challenge provenance");
+  assert.equal(await evaluate("document.querySelector('.debrief-copy strong')?.textContent"),finishedScore,
+    "Late post edits must not leave the score bound to a different layout");
+  const decisions = await evaluate("([...document.querySelectorAll('.ops-counters span')].map(e=>e.textContent))");
+  assert.ok(decisions.some(x=>/decisiones de quedarse/.test(x)),"Queue-stay choices are hidden from the player");
+  const counts = decisions.filter((x)=>/cambios de fila|decisiones de quedarse/.test(x)).map((x)=>{
+    const match = x.trim().match(/^([0-9]+) /);
+    assert.ok(match,"Unparseable visible queue decision counter: "+JSON.stringify(x));
+    return Number(match[1]);
+  });
+  assert.equal(counts.length,2,"Expected both visible stay and switch counts");
+  assert.equal(counts[0]+counts[1],53,
+    "The UI must expose all 53 stage choices, not just successful lane switches");
   await evaluate("document.querySelector('.score-ledger summary')?.click()");
   await screenshot("03-score-ledger");
   await clickButton("Copiar desafío");
-  await clickButton("Ajustar diseño");
-  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"application",
-    "Explicit edit transition must unlock the static board");
-  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),false);
   await fullRound("Serpentina","04-serpentine");
   await fullRound("Espacio libre","05-open-floor");
   await clickButton("R04 · Las maletas cantoras");
   assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')"),true);
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste −15[,.]48 s/);
   await fullRound("División guiada","08-r04",25,856);
   await clickButton("R05 · Dos vuelos, una pista");
   assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),2);
+  assert.match(await evaluate("document.querySelector('.metrics article:first-child small')?.textContent"),/ajuste \+6[,.]28 s/,
+    "R05 has not yet started; +6.28 is a rule adjustment, not elapsed time");
   await fullRound("Espacio libre","09-r05",24,810);
+  await clickButton("R06 · La fila que respira");
+  assert.match(await evaluate("document.querySelector('.contract')?.textContent||''"),
+    /respiro desde 00:14.*retirar UNA cinta visible/,
+    "Instructions must disclose R06's one exceptional allowed live removal");
+  assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),4);
+  assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent"),/0\/1 usado.*Disponible desde 00:14/);
+  await fullRound("Serpentina","12-r06-no-breath",25,833);
+
+  // Responsive acceptance: one real game page, four selectable missions, 12
+  // reference device sizes, and three window/zoom modes. These CDP viewports
+  // are emulations: they do not certify real Safari, OS fullscreen, or pinch zoom.
+  const devices = [
+    {id:"iphone-x",width:375,height:812,touch:true},
+    {id:"iphone-13",width:390,height:844,touch:true},
+    {id:"iphone-max",width:430,height:932,touch:true},
+    {id:"pixel-7",width:412,height:915,touch:true},
+    {id:"galaxy-s22",width:360,height:780,touch:true},
+    {id:"galaxy-fold",width:280,height:653,touch:true},
+    {id:"ipad-mini",width:768,height:1024,touch:true},
+    {id:"ipad-air",width:820,height:1180,touch:true},
+    {id:"ipad-pro",width:1024,height:1366,touch:true},
+    {id:"laptop-13",width:1280,height:800,touch:false},
+    {id:"laptop-15",width:1440,height:900,touch:false},
+    {id:"desktop",width:1920,height:1080,touch:false},
+  ];
+  function modes(device) {
+    const zoom = device.width >= 768 ? 2 : 1.25;
+    return [
+      {id:"full-window",width:device.width,height:device.height},
+      {id:"windowed",width:Math.floor(device.width*.78),height:Math.floor(device.height*.75)},
+      {id:"zoom-equivalent",width:Math.floor(device.width/zoom),height:Math.floor(device.height/zoom)},
+      {id:"zoom-out-equivalent",width:Math.floor(device.width*1.25),height:Math.floor(device.height*1.25)},
+      ...(device.touch ? [{id:"landscape",width:device.height,height:device.width}] : []),
+    ];
+  }
+  async function setViewport(device,mode) {
+    await send("Emulation.setDeviceMetricsOverride",{
+      width:mode.width,height:mode.height,deviceScaleFactor:device.touch ? 2:1,
+      mobile:device.touch,
+      screenWidth:mode.width,screenHeight:mode.height,
+    });
+    await sleep(100);
+  }
+  async function geometry(phase,id) {
+    const d=await evaluate("(()=>{"
+      +"const w=innerWidth,root=document.documentElement,detail=document.querySelector('.debrief'),"
+      +"map=document.querySelector('.canvas-wrap'),dpad=document.querySelector('.mobile-post-controls');"
+      +"const visible=e=>e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';"
+      +"const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}};"
+      +"const mobile=matchMedia('(max-width:720px)').matches;"
+      +"const actions=[...document.querySelectorAll('.top-actions button,.toolbar-controls button,.mobile-post-controls button,.debrief-actions button,.run,.score-ledger summary')].filter(visible);"
+      +"return {width:w,scrollWidth:root.scrollWidth,mobile,actions:actions.length,"
+      +"offscreen:actions.filter(e=>{const r=rect(e);return r.left< -3||r.right>w+3}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8),"
+      +"short:mobile?actions.filter(e=>{const r=rect(e);return r.width<43.5||r.height<43.5}).map(e=>({text:e.getAttribute('aria-label')||e.textContent.slice(0,28),box:rect(e)})).slice(0,8):[],"
+      +"debrief:visible(detail)?rect(detail):null,map:visible(map)?rect(map):null,"
+      +"metricOverlaps:[...document.querySelectorAll('.metrics article')].map((card,i)=>{const a=card.querySelector('strong'),b=card.querySelector('small');if(!a||!b)return null;const u=rect(a),v=rect(b);const collide=u.right>v.left+1&&v.right>u.left+1&&u.bottom>v.top+1&&v.bottom>u.top+1;return collide?{index:i,clock:u,caption:v}:null}).filter(Boolean),"
+      +"earlyRun:visible(document.querySelector('.mobile-run-early'))?rect(document.querySelector('.mobile-run-early')):null,"
+      +"dpad:visible(dpad)?rect(dpad):null};})()");
+    assert.ok(d.width>0,id+" zero browser viewport");
+    assert.ok(d.scrollWidth<=d.width+3,id+" document horizontal overflow: "+JSON.stringify(d));
+    assert.deepEqual(d.offscreen,[],id+" actionable element beyond viewport: "+JSON.stringify(d));
+    assert.deepEqual(d.metricOverlaps,[],id+" score-caption collision: "+JSON.stringify(d));
+    assert.deepEqual(d.short,[],id+" undersized touch target: "+JSON.stringify(d));
+    if(phase==="debrief" && d.mobile) {
+      assert.ok(d.debrief&&d.debrief.left>=-2&&d.debrief.right<=d.width+2,
+        id+" mobile debrief offscreen "+JSON.stringify(d));
+    }
+    if(phase==="intro" && d.mobile) {
+      assert.ok(d.dpad && d.dpad.width<=d.width+2,
+        id+" missing or overflowing mobile precision controls "+JSON.stringify(d));
+      assert.ok(d.earlyRun && d.earlyRun.height>=44 && d.earlyRun.bottom<=d.map.top+3,
+        id+" mobile Start/Pause/Resume must be reachable above the tall map "+JSON.stringify(d));
+    }
+    console.info("RESPONSIVE_MATRIX "+JSON.stringify({phase,id,...d}));
+  }
+  // Completed R06 debrief, including its actual score, must remain accessible
+  // before any subsequent mode or mission changes.
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    await geometry("debrief",id);
+    await screenshot("matrix-"+id+"-debrief");
+    if(device.touch && mode.width<=360) {
+      const result=await evaluate("(()=>{const s=document.querySelector('.debrief');if(!s)return null;s.scrollTop=s.scrollHeight;const bounds=s.getBoundingClientRect();const actions=[...s.querySelectorAll('.debrief-actions button')];const boxes=actions.map(b=>b.getBoundingClientRect());return {scrollTop:s.scrollTop,scrollHeight:s.scrollHeight,clientHeight:s.clientHeight,visible:boxes.every(b=>b.top>=bounds.top-2&&b.bottom<=bounds.bottom+2),buttons:actions.length};})()");
+      assert.ok(result?.buttons===3&&result.visible,id+" debrief share/retry buttons unreachable after scroll: "+JSON.stringify(result));
+      await screenshot("matrix-"+id+"-debrief-bottom");
+      await evaluate("document.querySelector('.debrief').scrollTop=0");
+    }
+  }
+  await clickButton("Ajustar diseño");
+  assert.equal(await evaluate("document.querySelector('.game-canvas')?.getAttribute('role')"),"application",
+    "Only the explicit Finished → Editing transition may re-enable the canvas");
+  assert.equal(await evaluate("document.querySelector('.mobile-post-actions .select-post')?.disabled"),false,
+    "Post editing must become available again after leaving the debrief");
+  const missionCases=[
+    ["Turno clásico","Turno clásico",0],
+    ["R04 · Las maletas cantoras","R04",4],
+    ["R05 · Dos vuelos, una pista","R05",2],
+    ["R06 · La fila que respira","R06",4],
+  ];
+  for(const device of devices)for(const mode of modes(device)){
+    const id=device.id+"-"+mode.id;
+    await setViewport(device,mode);
+    for(const [button,active,waves] of missionCases) {
+      await clickButton(button);
+      assert.equal(await evaluate("document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes("+JSON.stringify(active)+")"),true,id+" mission selection "+button);
+      assert.equal(await evaluate("document.querySelectorAll('.flight-timeline span').length"),waves,id+" mission flight schedule "+button);
+      await geometry("intro",id+"-"+active);
+    }
+    assert.match(await evaluate("document.querySelector('.breath-banner')?.textContent||''"),/0\/1 usado/,id+" R06 token missing");
+    await clickButton("Serpentina");
+    await clickButton("½ Lento");
+    assert.equal(await evaluate("document.querySelector('.pace button[aria-pressed=true]')?.textContent.includes('½ Lento')"),true,id+" pace toggle");
+    await clickButton("Iniciar turno");
+    await clickButton("Pausar turno");
+    await clickButton("Reiniciar turno");
+    assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00",id+" reset");
+    await screenshot("matrix-"+id+"-intro");
+  }
+  console.info("RESPONSIVE_MATRIX_PASS devices="+devices.length+
+    " variants="+devices.reduce((n,d)=>n+modes(d).length,0)+
+    " mission_cases="+missionCases.length);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await sleep(150);
   const width=await evaluate("({viewport:window.innerWidth,document:document.documentElement.scrollWidth})");
@@ -204,8 +397,15 @@ try{
   const shortTargets=await evaluate("([...document.querySelectorAll('.debrief-actions button,.top-actions button,.toolbar-controls button,.run,.score-ledger summary')].filter(x=>getComputedStyle(x).display!=='none'&&x.getBoundingClientRect().height<43.5).map(x=>({text:x.textContent,height:x.getBoundingClientRect().height})))");
   assert.deepEqual(shortTargets,[],"Small touch targets in mobile view "+JSON.stringify(shortTargets));
   await screenshot("06-mobile-debrief");
+  // A friend's URL is NOT permission to replace the player's personal layout.
+  // Seed a non-empty local design and verify it survives import, editing and exit.
+  const personalLayout = JSON.stringify([[{from:"2:3",to:"3:3"}],[]]);
+  await evaluate("localStorage.setItem('gateflow-layout-v2',"+JSON.stringify(personalLayout)+")");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947')");
+  await waitFor("document.querySelector('.temporary-layout-note')?.textContent.includes('RETO TEMPORAL')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Opening a shared challenge silently erased the personal saved belt design");
   await screenshot("07-shared-challenge");
   // Keyboard-equivalent mobile D-pad bypasses sub-44px map post spacing.
   const mobileButton = async (label) => {
@@ -230,9 +430,33 @@ try{
   assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),emptyFingerprint,"D-pad did not remove the belt");
   await mobileButton("Cambiar zona del plano");
   assert.match(await evaluate("document.querySelector('.mobile-post-control-heading')?.textContent"),/seguridad/i);
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Editing the temporary challenge unexpectedly persisted it over the personal map");
+  await clickButton("Volver a mi plano");
+  await waitFor("document.querySelector('.temporary-layout-note')===null && !new URL(location.href).searchParams.has('layout')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Returning to the saved map failed to preserve the original");
+  assert.notEqual(await evaluate("document.querySelector('.toolbar .label')?.textContent"),emptyFingerprint,
+    "Return-to-personal did not restore the nonempty saved geometry");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=waves-1"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947') && document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout);
   await screenshot("10-round-shared-challenge");
+  // Explicit saves must fail visibly if browser privacy settings deny writes.
+  await evaluate("window.__nativeSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('blocked','SecurityError')}");
+  await clickButton("Guardar este plano");
+  assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/No se pudo guardar/,
+    "An unsuccessful save must not tell the player it succeeded");
+  assert.equal(await evaluate("!!document.querySelector('.temporary-layout-note')"),true,
+    "Denied save must keep the challenge temporary");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Denied save corrupted the original personal map");
+  await evaluate("Storage.prototype.setItem=window.__nativeSetItem");
+  // Only an explicit, successful "Guardar" authorizes replacing the saved map.
+  await clickButton("Guardar este plano");
+  await waitFor("localStorage.getItem('gateflow-layout-v2')==='[[],[]]'");
+  assert.equal(await evaluate("document.querySelector('.temporary-layout-note')"),null,
+    "Saved design should no longer advertise a temporary draft");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=1000&round=r04&rules=waves-1"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('igualar')");
   assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/igualar los 1000 puntos máximos/,
@@ -245,17 +469,33 @@ try{
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false);
-  // A reversed second encoding is a duplicate physical belt, not a new
-  // challenge with a different replayable arrangement.
-  const physicalA=1*15+1, physicalB=1*15+2, postCount=15*12;
-  const duplicateLayout="G1."+
-    (physicalA*postCount+physicalB).toString(36).toUpperCase()+"."+
-    (physicalB*postCount+physicalA).toString(36).toUpperCase();
-  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout="+duplicateLayout+"&beat=947"});
+
+  // A challenge with both directed encodings of one physical belt used to
+  // pass layout validation despite providing zero additional corridor blockage.
+  const physicalA = 1 * 15 + 1, physicalB = 1 * 15 + 2, postCount = 15 * 12;
+  const physicalDuplicateCode = "G1." +
+    (physicalA * postCount + physicalB).toString(36).toUpperCase() + "." +
+    (physicalB * postCount + physicalA).toString(36).toUpperCase();
+  await send("Page.navigate", {url: "http://127.0.0.1:" + serverPort +
+    "/gategame/?layout=" + physicalDuplicateCode + "&beat=947"});
   await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
   await sleep(200);
+  assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"), false,
+    "Reciprocal duplicate geometry must not create a comparable challenge");
+  // Choosing a new preset explicitly exits the challenge, including its URL.
+  // Otherwise the stale query silently re-imports the friend's layout on reload.
+  await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
+  await waitFor("!!document.querySelector('.challenge-ribbon')");
+  await clickButton("Serpentina");
+  const leftChallenge = await evaluate("({temporary:!!document.querySelector('.temporary-layout-note'),challenge:!!document.querySelector('.challenge-ribbon'),urlHasLayout:new URL(location.href).searchParams.has('layout')})");
+  assert.deepEqual(leftChallenge,{temporary:false,challenge:false,urlHasLayout:false},
+    "Preset exit left challenge state or URL provenance stale");
+  const exitLayout = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  await send("Page.reload",{ignoreCache:true});
+  await waitFor("document.querySelector('h1')?.textContent==='Gateflow'");
+  await waitFor("document.querySelector('.toolbar .label')?.textContent==="+JSON.stringify(exitLayout));
   assert.equal(await evaluate("!!document.querySelector('.challenge-ribbon')"),false,
-    "Duplicate physical belts must not generate a comparable shared score");
+    "Reload unexpectedly reopened an exited challenge");
   assert.equal(errors.length,0,errors.join("\n"));
   console.info("BROWSER_SMOKE_PASS commit="+JSON.parse(await readFile(path.join(root,"version.json"),"utf8")).sourceRevision);
 }finally{
