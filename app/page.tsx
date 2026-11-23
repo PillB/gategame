@@ -473,8 +473,8 @@ function Board({ edges, agents, selected, locked, completed, breathMode, elapsed
 function safeRead(key: string) {
   try { return localStorage.getItem(key); } catch { return null; }
 }
-function safeWrite(key: string, value: string) {
-  try { localStorage.setItem(key, value); } catch { /* Persistence is optional. */ }
+function safeWrite(key: string, value: string): boolean {
+  try { localStorage.setItem(key, value); return true; } catch { return false; }
 }
 
 export default function Home() {
@@ -674,6 +674,10 @@ export default function Home() {
   }
   function saveTemporaryLayout() {
     if (!temporaryChallenge || gameLocked || finished) return;
+    if (!safeWrite("gateflow-layout-v2", JSON.stringify(edges))) {
+      setMessage("No se pudo guardar este plano: el navegador bloqueó el almacenamiento. El reto sigue siendo temporal.");
+      return;
+    }
     setTemporaryChallenge(false);
     setMessage("Guardaste este plano de reto como tu diseño local. Los próximos cambios también se guardarán aquí.");
   }
@@ -693,7 +697,9 @@ export default function Home() {
     const url = new URL(window.location.href);
     for (const key of ["layout", "beat", "round", "rules"]) url.searchParams.delete(key);
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
-    setMessage("Regresaste a tu plano guardado. El reto temporal no reemplazó tu diseño.");
+    setMessage(restored
+      ? "Regresaste a tu plano guardado. El reto temporal no reemplazó tu diseño."
+      : "No había un plano local válido; se cargó División guiada sin guardar el reto temporal.");
   }
   function commitBest() {
     if (finished && score > bestScore) { setBestScore(score); safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }
