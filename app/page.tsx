@@ -672,6 +672,11 @@ export default function Home() {
     setSelected(null);
     setMessage("Cambio rehecho. La vista previa de rutas se actualizó.");
   }
+  function clearChallengeUrl() {
+    const url = new URL(window.location.href);
+    for (const key of ["layout", "beat", "round", "rules"]) url.searchParams.delete(key);
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }
   function saveTemporaryLayout() {
     if (!temporaryChallenge || gameLocked || finished) return;
     if (!safeWrite("gateflow-layout-v2", JSON.stringify(edges))) {
@@ -694,9 +699,7 @@ export default function Home() {
     setStartingLayout(null);
     breathSpentRef.current = false;
     setSim(blank());
-    const url = new URL(window.location.href);
-    for (const key of ["layout", "beat", "round", "rules"]) url.searchParams.delete(key);
-    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    clearChallengeUrl();
     setMessage(restored
       ? "Regresaste a tu plano guardado. El reto temporal no reemplazó tu diseño."
       : "No había un plano local válido; se cargó División guiada sin guardar el reto temporal.");
@@ -722,6 +725,7 @@ export default function Home() {
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (gameLocked) return;
     captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setChallengeTarget(null);
+    if (temporaryChallenge) clearChallengeUrl();
     setTemporaryChallenge(false);
     editLayout({ type: "load", layout: mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []] });
     setSelected(null); setCopied(false); setShareFallback(null);
@@ -730,6 +734,7 @@ export default function Home() {
   function selectRound(nextId: string) {
     if (gameLocked || nextId === roundId) return;
     commitBest(); breathSpentRef.current = false; setStartingLayout(null); editLayout({ type: "clear" }); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
+    if (temporaryChallenge) clearChallengeUrl();
     const savedBest = Number(safeRead(nextId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${nextId}-waves-1`) ?? 0);
     setBestScore(Number.isFinite(savedBest) ? Math.max(0, Math.min(1000, savedBest)) : 0);
     setSelected(null); setCopied(false); setShareFallback(null);
