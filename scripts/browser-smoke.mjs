@@ -152,6 +152,35 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
+  // A brand-new player sees a measurable, non-scoring A* access preview.
+  // One actual canvas edit must update that preview and be undoable; all
+  // metrics, model geometry and saved baseline must return after Undo.
+  const beforeWorkshop = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  const routeBefore = await evaluate("document.querySelector('.route-preview')?.textContent");
+  assert.match(routeBefore,/28\\/28/,"Preflight access preview is not present on first visit");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
+    "Undo must be unavailable before any actual edit");
+  const tapWorkshopPost=async (x,y=10)=>{
+    const script="(()=>{const c=document.querySelector('.game-canvas'),b=c.getBoundingClientRect();"+
+      "const x="+x+",y="+y+",px=52+x*58+(y-5.5)*1.8,py=1160-(11-y)*40;"+
+      "c.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:b.left+px/920*b.width,clientY:b.top+py/1240*b.height}));return true;})()";
+    await evaluate(script);await sleep(70);
+  };
+  await tapWorkshopPost(0);await tapWorkshopPost(1);
+  const afterWorkshop = await evaluate("document.querySelector('.toolbar .label')?.textContent");
+  assert.notEqual(afterWorkshop,beforeWorkshop,"The player's belt edit must modify real geometry");
+  assert.notEqual(await evaluate("document.querySelector('.route-preview')?.textContent"),routeBefore,
+    "A* access preview must react to a belt that changes a shortest route");
+  await clickButton("Deshacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),beforeWorkshop,
+    "Undo failed to restore the exact starting layout");
+  assert.equal(await evaluate("document.querySelector('.route-preview')?.textContent"),routeBefore,
+    "Undo left a stale preview");
+  await clickButton("Rehacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),afterWorkshop,
+    "Redo failed to restore the edited layout");
+  await clickButton("Deshacer");
+  assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),beforeWorkshop);
   // Run→Running must lock layout in the same render even at exact t=0.
   // Freeze only the CI wall-clock dispatch, never the simulation DT or seed.
   await evaluate("window.__gateflowFreezeTimers=true");
@@ -159,6 +188,8 @@ try{
   assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"),"00:00");
   assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
     "The player must not edit the preset at zero elapsed time in a running turn");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
+    "Preflight Undo must not bypass the scored-run layout lock");
   await evaluate("window.__gateflowFreezeTimers=false");
   await clickButton("Pausar turno");
   const paused=await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent");
