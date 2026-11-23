@@ -762,14 +762,14 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <section className="route-preview" aria-label="Vista previa de los accesos del plano">
+        {!gameLocked && !finished && <section className="route-preview" aria-label="Vista previa de los accesos del plano">
           <strong>ANTES DE SIMULAR · ACCESOS CON RUTA: {routePreview.reachable}/{routePreview.total}</strong>
           <span>{routePreview.blocked
-            ? `${routePreview.blocked} accesos sin paso directo hasta control; los viajeros deberán probar otra entrada.`
+            ? `${routePreview.blocked} entradas sin ruta hasta control; sus pasajeros intentarán otra entrada.`
             : "Todas las entradas tienen al menos una ruta hasta control."}
-            {" "}Ruta más corta media: {routePreview.meanSteps === null ? "sin rutas" : routePreview.meanSteps.toLocaleString("es-PE", { maximumFractionDigits: 1 }) + " casillas"}.</span>
-          <small>Estimación geométrica para migraciones y seguridad. No predice esperas, relevos, paciencia ni puntuación.</small>
-        </section>
+            {" "}Ruta más corta media entre entradas conectadas: {routePreview.meanSteps === null ? "sin rutas" : routePreview.meanSteps.toLocaleString("es-PE", { maximumFractionDigits: 1 }) + " casillas"}.</span>
+          <small>Solo considera cintas del diseño, no fallas temporales. No predice esperas, relevos, paciencia ni puntuación.</small>
+        </section>}
         <div className="scenario-banner"><span>{round.badge}</span><b>{round.title} · {POST_COLS * POST_ROWS} postes por zona</b><small>{round.story} {round.decision}</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
         {round.waves.length > 0 && <div className="flight-board" role="status" aria-live="off"><strong>✈ TABLERO DE LLEGADAS</strong><span>{nextWave ? `${nextWave.label} · ${nextWave.count} viajeros en ${nextWaveSeconds} s` : `Todos los vuelos aterrizaron · ${sim.spawned}/${TARGET} viajeros en sala`}</span><small>{lastWave ? lastWave.surprise : round.payoff}</small><div className="flight-timeline" aria-label="Horarios de vuelos">{round.waves.map((wave) => <span key={wave.at} className={sim.elapsed >= wave.at ? "landed" : "upcoming"}>{timeLabel(wave.at)} · {wave.count}</span>)}</div></div>}
         {roundId === "r06" && <div className="breath-banner" role="status"><strong>📖 PASAJE DE RESPIRO · {sim.breathEdits}/1 usado</strong><span>{sim.breathEdits ? "El corredor quedó abierto. Ya usaste tu único cambio en marcha." : finished ? "Turno cerrado; guardaste el cambio de respiro." : !breathOpen ? "Disponible desde 00:14: podrás retirar una cinta. No podrás añadir barreras." : "¡Un cambio disponible! Pausa el turno cuando quieras y retira una cinta existente. No caduca."}</span></div>}
