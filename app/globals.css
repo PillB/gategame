@@ -291,3 +291,19 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .route-preview{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:12px}
   .route-preview strong,.route-preview span,.route-preview small{max-width:100%}
 }
+
+/* Opening a shared challenge is an ephemeral workshop, not a save operation.
+   Controls are explicit, keyboard-accessible, and unavailable mid-score. */
+.temporary-layout-note{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 16px;padding:10px 20px;border-bottom:1px solid #486477;background:#20323c;color:#e5f0f4;font-size:12px;line-height:1.5}
+.temporary-layout-note strong{color:#d9ff54;font:750 11px var(--font-mono)}
+.temporary-layout-note div{display:flex;flex-wrap:wrap;gap:8px}
+.temporary-layout-note button{min-height:40px;min-width:115px;border:1px solid #8ca8b0;border-radius:8px;background:#304650;color:white;padding:8px 12px;font:650 12px var(--font-mono);cursor:pointer}
+.temporary-layout-note button:hover:not(:disabled){background:#45606d}
+.temporary-layout-note button:focus-visible{outline:2px solid var(--acid);outline-offset:2px}
+.temporary-layout-note button:disabled{opacity:.42;cursor:not-allowed}
+@media(max-width:720px){
+  .temporary-layout-note{display:grid;grid-template-columns:minmax(0,1fr);padding:12px}
+  .temporary-layout-note div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .temporary-layout-note button{min-width:0;min-height:44px;white-space:normal}
+}
+@media(max-width:340px){.temporary-layout-note div{grid-template-columns:minmax(0,1fr)}}
