@@ -19,6 +19,7 @@ const output = ts.transpileModule(source, { fileName: "page.tsx", compilerOption
 }}).outputText;
 const sandbox = { exports: {}, module: { exports: {} }, require: (id) => {
   if (id === "@/lib/simulation.js") return require("../lib/simulation.js");
+  if (id === "@/lib/layout-workshop.js") return require("../lib/layout-workshop.js");
   if (id === "@/lib/challenges.js") return require("../lib/challenges.js");
   if (id === "@/lib/rounds.js") return require("../lib/rounds.js");
   return require(id);
