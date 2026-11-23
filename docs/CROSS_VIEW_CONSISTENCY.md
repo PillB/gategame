@@ -75,3 +75,25 @@ UI displayed wall-clock second == floor(exact tick / 10)
 | CV-05 P2 | User asks for daily/weekly/monthly menus that do not exist in this Gateflow repo | Locate correct app and inventory first-use transitions there; do not add meal/planning UI here | **Scope mismatch** |
 
 Existing state-machine maps and detailed historical fixes: [`STATE_MACHINES.md`](./STATE_MACHINES.md) and [`STATE_MACHINE_AUDIT_LEDGER.md`](./STATE_MACHINE_AUDIT_LEDGER.md). Test commands and operational custody: [`STACK_INVENTORY.md`](./STACK_INVENTORY.md).
+
+
+## Workshop synchronization and first-use measurable acceptance (22 Nov 2026)
+
+The edit model is now `layoutEditor.edges`, one authoritative source for canvas drawing, fingerprint, local-save effect, and a memoized **preflight route preview**. `past/future` are bounded user-command history, not server state.
+
+```mermaid
+flowchart TD
+  FIRST[First open / validated layout] --> BUILD[Choose preset + inspect path preview]
+  BUILD --> EDIT[Join/remove two neighboring posts]
+  EDIT --> METRICS[A* preview recalculates from new geometry]
+  METRICS --> UNDO[Undo: exact previous geometry]
+  UNDO --> REDO[Redo: exact edited geometry]
+  REDO --> START[Start: freeze geometry + clear editor history]
+  START --> SCORE[Run: deterministic physics, faults and live metrics]
+  SCORE --> DONE[End: protected debrief and shared starting layout]
+  DONE --> BUILD
+```
+
+Cross-view invariant: **fingerprint, rendered belts, local saved design, A* preview, mission picker, score and incident feed** must refer to the same effective state, with fault overlays explicitly separated from base geometry. Undo/redo are prohibited during any scored, paused or finished turn; the R06 14-second removal consumes the separate token and is never a reversible preflight action.
+
+The estimate is deliberately not the deterministic score: worker faults, moving passengers, waiting and passenger patience cannot be reconstructed from shortest paths alone. See `tests/layout-workshop.test.mjs` and `scripts/browser-smoke.mjs` for falsifiers; the latter verifies changes using actual canvas clicks and visible DOM, not merely source string existence. A future two-tab conflict UI remains an explicit OPEN gate.
