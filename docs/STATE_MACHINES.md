@@ -262,3 +262,25 @@ The **authoritative geometry** is `layoutEditor.edges`, not an unrelated canvas 
 A counterexample matters: one horizontal border belt visually exists but blocks zero interior corridor crossings, so the preview must stay exactly the same as an empty map. An interior full-row wall blocks 14/28 entry routes; opening one gap reconnects all 28 but increases average shortest-path length. Test both against actual A* in `tests/layout-workshop.test.mjs`, not against the number of belts. The Chrome first-use test makes a belt, checks a real preview change, undoes it, redoes it and restores the original fingerprint before running the original seeded score baseline. R06 live-edit and finished-state invariants remain separate gates.
 
 **Scope of proof:** source and hosted Chromium tests only when green on the exact SHA; full iPhone accessibility and a human novice's comprehension remain unverified. Implementation references: `lib/layout-workshop.js`, `app/page.tsx`, `scripts/browser-smoke.mjs`. Progressive, contextual feedback rather than forced tutorial overlays follows [NN/g progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) and [NN/g onboarding guidance](https://www.nngroup.com/articles/onboarding-tutorials/). The alternative 44px mobile controls align with WCAG's equivalent-target and enhanced target-size guidance; this is not native VoiceOver certification.
+
+
+## S7. Shared-challenge versus personal-save provenance (candidate, 22 Nov 2026)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Personal: Fresh load / validated local map
+  Personal --> Temporary: Open valid challenge layout
+  Temporary --> Temporary: Edit, Undo, Redo, Start, Pause, Replay
+  Temporary --> Personal: Save this layout explicitly
+  Temporary --> Personal: Return to my saved layout
+  Temporary --> Personal: Choose a different preset
+  Personal --> Personal: Edit / auto-save local map
+  state Temporary {
+    [*] --> DraftOnly
+    DraftOnly --> DraftOnly: localStorage writes forbidden
+  }
+```
+
+The initial `?layout=G1...` URL is a **temporary puzzle**, not permission to overwrite the user's `gateflow-layout-v2` personal save. The existing hydration effect loaded the challenge and then eagerly wrote `edges` into the same localStorage key once `storageReady` became true. That is silent loss of the previous editor state. `temporaryChallenge` now explicitly gates the save effect. Players can play, edit, pause, reset or share in this temporary session without replacing their personal map; `Guardar este plano` opts into saving, while `Volver a mi plano` reloads the validated personal map, resets temporary game/provenance, and removes challenge-specific query arguments. Switching to a preset deliberately exits the temporary draft and becomes the new saved layout. A malformed or incompatible round/score never makes a score comparable, independently of whether a valid imported map remains temporary.
+
+**Adversarial browser oracle:** seed `localStorage` with one personal belt, visit `?layout=G1&beat=947`, manipulate posts via real mobile D-pad, confirm the original storage string is unchanged; `Volver` must restore fingerprint and clear challenge URL; repeat import with R04 and explicitly `Guardar`, which alone must replace local storage with `[[],[]]`. Compare this to the old behavior: an automatic save after opening the link would fail before any player action. A true multi-tab write-conflict policy is still OPEN and should not be conflated with this temporary-provenance fix.
