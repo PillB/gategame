@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createLayoutWorkshop, layoutWorkshopReducer, summarizeLayoutAccess } from "@/lib/layout-workshop.js";
 import { challengePrompt, createChallengeUrl, createNativeShareData, describeRoundDelta, nextRoundExperiment, parseChallengeRound, parseChallengeScore } from "@/lib/challenges.js";
 import { arrivalAt, breathEditAvailable, canRemoveLiveBelt, DEFAULT_ROUND, formatTickClock, getRound, paceClockCaption, ROUNDS, scoredElapsed, upcomingWave } from "@/lib/rounds.js";
 import { addConnection, applyBeltFault, chooseLocalQueue, createShareCard, decodeLayout, edgeKey, encodeLayout, fieldOfViewContains, findCorridorRoute, findNextQueuedAgentIndex, findWorkerCrossing, getHighestCorridorRoute, getShiftMedals, isCorridorStepBlocked, queueWalkDuration, queueWalkLane, layoutFingerprint, parseNode, passengerPatience, rankShift, sanitizeLayoutGroups, scoreShiftBreakdown, selectServiceEvent, serviceLaneForCell, serviceTimeWithEvent, shouldAbandon, shuffleWithSeed, simulationInterval, workerShiftPlan } from "@/lib/simulation.js";
@@ -477,7 +478,8 @@ function safeWrite(key: string, value: string) {
 }
 
 export default function Home() {
-  const [edges, setEdges] = useState<[Edge[], Edge[]]>([[...GUIDED[0]], [...GUIDED[1]]]);
+  const [layoutEditor, editLayout] = useReducer(layoutWorkshopReducer, GUIDED, createLayoutWorkshop);
+  const edges: [Edge[], Edge[]] = layoutEditor.edges;
   const [roundId, setRoundId] = useState(DEFAULT_ROUND);
   const [storageReady, setStorageReady] = useState(false);
   const [sim, setSim] = useState<Sim>(blank);
@@ -505,7 +507,7 @@ export default function Home() {
         try { restored = sanitizeLayoutGroups(JSON.parse(safeRead("gateflow-layout-v2") ?? "null"), POST_COLS, POST_ROWS) as [Edge[], Edge[]] | null; } catch { restored = null; }
       }
       if (restored) {
-        setEdges(restored);
+        editLayout({ type: "load", layout: restored });
         if (challenge) {
           const targetScore = parseChallengeScore(query.get("beat"));
           if (targetScore !== null && challengeRound !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
@@ -559,6 +561,9 @@ export default function Home() {
   const layoutLocked = finished || (gameLocked && !breathOpen);
   const unresolvedFaults = sim.faults.filter((fault) => !fault.repaired);
   const displayEdges = useMemo(() => effectiveEdges(edges, sim.faults), [edges, sim.faults]);
+  const routePreview = useMemo(() => summarizeLayoutAccess(edges), [edges]);
+  const canUndo = !gameLocked && !finished && layoutEditor.past.length > 0;
+  const canRedo = !gameLocked && !finished && layoutEditor.future.length > 0;
   const paceElapsed = scoredElapsed(roundId, sim.elapsed);
   const landingOffset = (arrivalAt(roundId, TARGET - 1) ?? 0) - (arrivalAt(DEFAULT_ROUND, TARGET - 1) ?? 0);
   const landingOffsetLabel = Math.abs(landingOffset).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -611,7 +616,9 @@ export default function Home() {
         const existing = edges[grid].findIndex((edge) => edgeKey(edge.from, edge.to) === key);
         if (existing >= 0 && canRemoveLiveBelt(edges[grid], displayEdges[grid], selected.node, node)) {
           breathSpentRef.current = true;
-          setEdges((current) => { const next: [Edge[], Edge[]] = [[...current[0]], [...current[1]]]; next[grid] = next[grid].filter((edge) => edgeKey(edge.from, edge.to) !== key); return next; });
+          const next: [Edge[], Edge[]] = [[...edges[0]], [...edges[1]]];
+          next[grid] = next[grid].filter((edge) => edgeKey(edge.from, edge.to) !== key);
+          editLayout({ type: "load", layout: next }); // R06 consumes a token: never undoable
           setSim((state) => ({ ...state, breathEdits: state.breathEdits + 1 }));
           setSelected(null); setMessage("¡Pasaje despejado! Retiraste tu única cinta de respiro. Los viajeros recalculan su ruta por el corredor libre."); return;
         }
@@ -628,12 +635,16 @@ export default function Home() {
     if (selected.node === node) { setSelected(null); setMessage("Selección cancelada."); return; }
     const existing = edges[grid].findIndex((edge) => (edge.from === selected.node && edge.to === node) || (edge.from === node && edge.to === selected.node));
     if (existing >= 0) {
-      setEdges((current) => { const next: [Edge[], Edge[]] = [[...current[0]], [...current[1]]]; next[grid] = next[grid].filter((_, index) => index !== existing); return next; });
+      const next: [Edge[], Edge[]] = [[...edges[0]], [...edges[1]]];
+      next[grid] = next[grid].filter((_, index) => index !== existing);
+      editLayout({ type: "edit", layout: next });
       setSelected(null); setMessage("Cinta retráctil retirada. El corredor quedó libre."); return;
     }
     try {
       const updated = addConnection(edges[grid], selected.node, node, POST_COLS, POST_ROWS);
-      setEdges((current) => { const next: [Edge[], Edge[]] = [[...current[0]], [...current[1]]]; next[grid] = updated; return next; });
+      const next: [Edge[], Edge[]] = [[...edges[0]], [...edges[1]]];
+      next[grid] = updated;
+      editLayout({ type: "edit", layout: next });
       const fromPost = parseNode(selected.node), toPost = parseNode(node);
       const blocksInterior = fromPost.y === toPost.y ? fromPost.y > 0 && fromPost.y < POST_ROWS - 1 : fromPost.x > 0 && fromPost.x < POST_COLS - 1;
       setSelected(null); setMessage(blocksInterior
@@ -644,6 +655,18 @@ export default function Home() {
       setSelected({ grid, node });
     }
   }
+  function undoEdit() {
+    if (!canUndo) return;
+    editLayout({ type: "undo" });
+    setSelected(null);
+    setMessage("Último cambio deshecho. Comprueba el nuevo recorrido antes de simular.");
+  }
+  function redoEdit() {
+    if (!canRedo) return;
+    editLayout({ type: "redo" });
+    setSelected(null);
+    setMessage("Cambio rehecho. La vista previa de rutas se actualizó.");
+  }
   function commitBest() {
     if (finished && score > bestScore) { setBestScore(score); safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }
   }
@@ -653,25 +676,25 @@ export default function Home() {
   }
   function run() {
     setSelected(null); setCopied(false); setShareFallback(null);
-    if (finished) { captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
-    if (sim.elapsed === 0) setStartingLayout([[...edges[0]], [...edges[1]]]);
+    if (finished) { captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); editLayout({ type: "clear" }); setSim(blank()); setMessage("Ajusta una cinta y vuelve a simular la misma hora punta."); return; }
+    if (sim.elapsed === 0) { setStartingLayout([[...edges[0]], [...edges[1]]]); editLayout({ type: "clear" }); }
     setSim((state) => ({ ...state, running: !state.running }));
     setMessage(sim.running ? (breathOpen ? "Turno en pausa. Puedes retirar una cinta de respiro; los demás cambios de diseño siguen bloqueados." : "Turno en pausa. El diseño sigue bloqueado para que la puntuación sea comparable.") : sim.elapsed ? (breathOpen ? "Turno reanudado. Aún puedes retirar una cinta de respiro cuando quieras." : "Turno reanudado. El diseño sigue bloqueado.") : "Turno iniciado. Los pasajeros pasan por los espacios libres, no por las cintas.");
   }
   function reset() {
-    captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
+    captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); editLayout({ type: "clear" }); setSim(blank()); setSelected(null); setCopied(false); setShareFallback(null);
     setMessage("Turno reiniciado. Tu diseño de cintas se conserva y se desbloquea.");
   }
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (gameLocked) return;
     captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setChallengeTarget(null);
-    setEdges(mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []]);
+    editLayout({ type: "load", layout: mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []] });
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
   }
   function selectRound(nextId: string) {
     if (gameLocked || nextId === roundId) return;
-    commitBest(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
+    commitBest(); breathSpentRef.current = false; setStartingLayout(null); editLayout({ type: "clear" }); setSim(blank()); setRoundId(nextId); setChallengeTarget(null); setPreviousRun(null);
     const savedBest = Number(safeRead(nextId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${nextId}-waves-1`) ?? 0);
     setBestScore(Number.isFinite(savedBest) ? Math.max(0, Math.min(1000, savedBest)) : 0);
     setSelected(null); setCopied(false); setShareFallback(null);
@@ -732,8 +755,20 @@ export default function Home() {
             <div className="round-picker" role="group" aria-label="Misiones de llegada">{ROUNDS.map((option) => <button key={option.id} disabled={gameLocked || sim.running} aria-pressed={roundId === option.id} onClick={() => selectRound(option.id)}>{option.title}</button>)}</div>
             <div className="pace" role="group" aria-label="Velocidad de simulación"><button aria-pressed={pace === 0.5} onClick={() => setPace(0.5)}>½ Lento</button><button aria-pressed={pace === 1} onClick={() => setPace(1)}>1× Normal</button><button aria-pressed={pace === 2} onClick={() => setPace(2)}>2× Rápido</button></div>
             <div className="presets" role="group" aria-label="Diseños predeterminados"><button disabled={gameLocked} onClick={() => preset("guided")}>División guiada</button><button disabled={gameLocked} onClick={() => preset("serpentine")}>Serpentina</button><button disabled={gameLocked} onClick={() => preset("clear")}>Espacio libre</button></div>
+            <div className="layout-history" role="group" aria-label="Historial de cambios del diseño">
+              <button type="button" aria-label="Deshacer último cambio de cinta" disabled={!canUndo} onClick={undoEdit}>↶ Deshacer</button>
+              <button type="button" aria-label="Rehacer cambio de cinta" disabled={!canRedo} onClick={redoEdit}>↷ Rehacer</button>
+            </div>
           </div>
         </div>
+        <section className="route-preview" aria-label="Vista previa de los accesos del plano">
+          <strong>ANTES DE SIMULAR · ACCESOS CON RUTA: {routePreview.reachable}/{routePreview.total}</strong>
+          <span>{routePreview.blocked
+            ? `${routePreview.blocked} accesos sin paso directo hasta control; los viajeros deberán probar otra entrada.`
+            : "Todas las entradas tienen al menos una ruta hasta control."}
+            {" "}Ruta más corta media: {routePreview.meanSteps === null ? "sin rutas" : routePreview.meanSteps.toLocaleString("es-PE", { maximumFractionDigits: 1 }) + " casillas"}.</span>
+          <small>Estimación geométrica para migraciones y seguridad. No predice esperas, relevos, paciencia ni puntuación.</small>
+        </section>
         <div className="scenario-banner"><span>{round.badge}</span><b>{round.title} · {POST_COLS * POST_ROWS} postes por zona</b><small>{round.story} {round.decision}</small><strong className="flow-xp" title="Puntos acreditados: cambios de fila con tope de 45, más 40 por reparación. Las fallas sin reparar restan 35 aparte.">FLUJO +{flowPoints}</strong></div>
         {round.waves.length > 0 && <div className="flight-board" role="status" aria-live="off"><strong>✈ TABLERO DE LLEGADAS</strong><span>{nextWave ? `${nextWave.label} · ${nextWave.count} viajeros en ${nextWaveSeconds} s` : `Todos los vuelos aterrizaron · ${sim.spawned}/${TARGET} viajeros en sala`}</span><small>{lastWave ? lastWave.surprise : round.payoff}</small><div className="flight-timeline" aria-label="Horarios de vuelos">{round.waves.map((wave) => <span key={wave.at} className={sim.elapsed >= wave.at ? "landed" : "upcoming"}>{timeLabel(wave.at)} · {wave.count}</span>)}</div></div>}
         {roundId === "r06" && <div className="breath-banner" role="status"><strong>📖 PASAJE DE RESPIRO · {sim.breathEdits}/1 usado</strong><span>{sim.breathEdits ? "El corredor quedó abierto. Ya usaste tu único cambio en marcha." : finished ? "Turno cerrado; guardaste el cambio de respiro." : !breathOpen ? "Disponible desde 00:14: podrás retirar una cinta. No podrás añadir barreras." : "¡Un cambio disponible! Pausa el turno cuando quieras y retira una cinta existente. No caduca."}</span></div>}
