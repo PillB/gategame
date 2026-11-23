@@ -157,7 +157,7 @@ try{
   // metrics, model geometry and saved baseline must return after Undo.
   const beforeWorkshop = await evaluate("document.querySelector('.toolbar .label')?.textContent");
   const routeBefore = await evaluate("document.querySelector('.route-preview')?.textContent");
-  assert.match(routeBefore,/28\\/28/,"Preflight access preview is not present on first visit");
+  assert.ok(routeBefore.includes("28/28"), "Preflight access preview is not present on first visit");
   assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"),true,
     "Undo must be unavailable before any actual edit");
   const tapWorkshopPost=async (x,y=10)=>{
