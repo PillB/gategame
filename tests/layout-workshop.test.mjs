@@ -67,20 +67,23 @@ test("history is bounded to 20 real edits, oldest snapshots drop but newest is r
 
 test("access preview uses real corridor blocking, not a guessed belt-count penalty", () => {
   const clear = summarizeLayoutAccess(empty);
-  assert.deepEqual(clear, { reachable: 28, total: 28, blocked: 0, meanSteps: 10, byZone: [14,14] });
+  assert.deepEqual(clear, { reachable: 28, total: 28, blocked: 0, meanSteps: 10, extraSteps: 0, byZone: [14,14] });
   // Border belts are rendered but do not separate ANY interior corridor cell.
   const border = summarizeLayoutAccess([[{ from: "0:0", to: "1:0" }], []]);
   assert.deepEqual(border, clear);
   // An unbroken, interior 14-segment belt is a genuine impassable wall.
   const wall = Array.from({ length: 14 }, (_, x) => ({ from: `${x}:5`, to: `${x+1}:5` }));
   const blocked = summarizeLayoutAccess([wall, []]);
-  assert.deepEqual(blocked, { reachable: 14, total: 28, blocked: 14, meanSteps: 10, byZone: [0,14] });
+  assert.deepEqual(blocked, { reachable: 14, total: 28, blocked: 14, meanSteps: 10, extraSteps: 0, byZone: [0,14] });
   // Open just one gap: A* can detour and all access points regain a route.
   const gapped = summarizeLayoutAccess([wall.filter((_, i) => i !== 7), []]);
   assert.equal(gapped.reachable, 28);
   assert.ok(gapped.meanSteps > clear.meanSteps);
+  assert.ok(gapped.extraSteps > 0);
   assert.equal(gapped.blocked, 0);
   assert.deepEqual(summarizeLayoutAccess([[], wall]).byZone, [14,0]);
+  assert.equal(summarizeLayoutAccess([[{ from: "0:10", to: "1:10" }], []]).extraSteps, 1,
+    "one player-caused detour must never be rounded to zero");
   assert.throws(() => summarizeLayoutAccess([[belt, {...belt, from:"1:5",to:"0:5"}], []]), /válido/);
 });
 
