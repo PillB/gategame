@@ -273,3 +273,21 @@ footer { min-height:54px; display:flex; align-items:center; justify-content:spac
   .debrief-copy,.medals,.score-ledger,.next-experiment,.debrief-actions{min-width:0}
   .medals{grid-template-columns:minmax(0,1fr)}
 }
+
+/* The preflight workshop is explanatory, never a score or reward forecast.
+   Undo/redo are reachable alternatives to precise canvas manipulations. */
+.layout-history{display:flex;align-items:center;gap:5px;padding:4px;border:1px solid #38505a;border-radius:10px;background:#111d23}
+.layout-history button{min-height:36px;border:0;border-radius:7px;padding:8px 12px;color:#dbe9ed;background:#23343c;font:650 11px/1.2 var(--font-mono);cursor:pointer}
+.layout-history button:hover:not(:disabled){background:#344c56;color:white}
+.layout-history button:focus-visible{outline:2px solid var(--acid);outline-offset:2px}
+.layout-history button:disabled{opacity:.42;cursor:not-allowed}
+.route-preview{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 16px;padding:11px 20px;border-bottom:1px solid #3b5361;background:#17242b;color:#c6dce4}
+.route-preview strong{font:750 11px/1.5 var(--font-mono);color:#d9ff54;letter-spacing:.03em}
+.route-preview span{font:500 12px/1.5 var(--font-mono);overflow-wrap:anywhere}
+.route-preview small{color:#a8bec9;font:500 10px/1.5 var(--font-mono);overflow-wrap:anywhere}
+@media(max-width:720px){
+  .layout-history{width:100%;box-sizing:border-box}
+  .layout-history button{flex:1;min-height:44px}
+  .route-preview{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:12px}
+  .route-preview strong,.route-preview span,.route-preview small{max-width:100%}
+}
