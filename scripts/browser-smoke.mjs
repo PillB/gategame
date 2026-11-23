@@ -397,8 +397,15 @@ try{
   const shortTargets=await evaluate("([...document.querySelectorAll('.debrief-actions button,.top-actions button,.toolbar-controls button,.run,.score-ledger summary')].filter(x=>getComputedStyle(x).display!=='none'&&x.getBoundingClientRect().height<43.5).map(x=>({text:x.textContent,height:x.getBoundingClientRect().height})))");
   assert.deepEqual(shortTargets,[],"Small touch targets in mobile view "+JSON.stringify(shortTargets));
   await screenshot("06-mobile-debrief");
+  // A friend's URL is NOT permission to replace the player's personal layout.
+  // Seed a non-empty local design and verify it survives import, editing and exit.
+  const personalLayout = JSON.stringify([[{from:"2:3",to:"3:3"}],[]]);
+  await evaluate("localStorage.setItem('gateflow-layout-v2',"+JSON.stringify(personalLayout)+")");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947')");
+  await waitFor("document.querySelector('.temporary-layout-note')?.textContent.includes('RETO TEMPORAL')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Opening a shared challenge silently erased the personal saved belt design");
   await screenshot("07-shared-challenge");
   // Keyboard-equivalent mobile D-pad bypasses sub-44px map post spacing.
   const mobileButton = async (label) => {
@@ -423,9 +430,23 @@ try{
   assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),emptyFingerprint,"D-pad did not remove the belt");
   await mobileButton("Cambiar zona del plano");
   assert.match(await evaluate("document.querySelector('.mobile-post-control-heading')?.textContent"),/seguridad/i);
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Editing the temporary challenge unexpectedly persisted it over the personal map");
+  await clickButton("Volver a mi plano");
+  await waitFor("document.querySelector('.temporary-layout-note')===null && !new URL(location.href).searchParams.has('layout')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout,
+    "Returning to the saved map failed to preserve the original");
+  assert.notEqual(await evaluate("document.querySelector('.toolbar .label')?.textContent"),emptyFingerprint,
+    "Return-to-personal did not restore the nonempty saved geometry");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=947&round=r04&rules=waves-1"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('947') && document.querySelector('.round-picker button[aria-pressed=true]')?.textContent.includes('R04')");
+  assert.equal(await evaluate("localStorage.getItem('gateflow-layout-v2')"),personalLayout);
   await screenshot("10-round-shared-challenge");
+  // Only an explicit "Guardar" authorizes replacing the personal saved map.
+  await clickButton("Guardar este plano");
+  await waitFor("localStorage.getItem('gateflow-layout-v2')==='[[],[]]'");
+  assert.equal(await evaluate("document.querySelector('.temporary-layout-note')"),null,
+    "Saved design should no longer advertise a temporary draft");
   await send("Page.navigate",{url:"http://127.0.0.1:"+serverPort+"/gategame/?layout=G1&beat=1000&round=r04&rules=waves-1"});
   await waitFor("document.querySelector('.challenge-ribbon')?.textContent.includes('igualar')");
   assert.match(await evaluate("document.querySelector('.toolbar')?.textContent||''"),/igualar los 1000 puntos máximos/,
