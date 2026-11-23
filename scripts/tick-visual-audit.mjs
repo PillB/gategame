@@ -26,6 +26,7 @@ const engine = { exports: {}, require: (id) => {
   if (id === "@/lib/challenges.js") return require("../lib/challenges.js");
   if (id === "@/lib/rounds.js") return require("../lib/rounds.js");
   if (id === "@/lib/simulation.js") return require("../lib/simulation.js");
+  if (id === "@/lib/layout-workshop.js") return require("../lib/layout-workshop.js");
   return require(id);
 }};
 new Script(js, { filename: "visual-audit-engine.cjs" }).runInNewContext(engine, { timeout: 5000 });
