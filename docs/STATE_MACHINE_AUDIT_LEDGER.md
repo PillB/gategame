@@ -91,3 +91,6 @@ Impacts: `Home` hydration, localStorage save effect, preset transition, score-fi
 
 
 **SM-26 negative storage case:** `localStorage.setItem` can throw (privacy controls/quota/security policy). The explicit Save button now checks the write result before changing challenge provenance; a denied save leaves the temporary banner, preserves the prior personal map, and announces a Spanish error. The browser regression monkeypatches the Storage prototype to deny writes, checks no false success or data loss, restores writes, and then proves the same button can save successfully. Default automatic persistence elsewhere remains best-effort and must not claim guaranteed success.
+
+
+**SM-27 P1 — challenge URL provenance:** Choosing a preset or switching missions previously cleared `challengeTarget` but left `?layout=...&beat=...&round=...&rules=...` in the browser URL. Refresh could recreate the stale challenge and overwrite the intended editor navigation. `clearChallengeUrl` now deletes only challenge-specific parameters on explicit exit, preserving unrelated parameters; the regression selects a new preset from an imported challenge, asserts the temporary banner, challenge ribbon and URL flags all disappear, then reloads and verifies the chosen design remains. Fresh exact-SHA CI required. No server state is involved.
