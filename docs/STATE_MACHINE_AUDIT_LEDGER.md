@@ -59,3 +59,23 @@ The last verified R06 PR before this audit was `d4a78e3d17de503cadec00ba14371dca
 Current release decision is **NO AUTO-MERGE / NO R06 PUBLIC DEPLOY** until the candidate CI passes, the new screenshot corrections are reviewed and the independent device/user release gates close. Do not alter the original private ChatGPT Site via this repository.
 
 Architecture references: [state diagrams](./STATE_MACHINES.md), [engineering contract](./GAME_SPEC.md), [release ledger](./RELEASE_LEDGER.md), [agent policy](../AGENTS.md).
+
+
+## 22 Nov 2026 workshop and CI repair — provisional red-team register
+
+| ID | Severity / state | Root cause and causal intervention | Independent oracle and integration risk |
+| --- | --- | --- | --- |
+| SM-21 | P1 · FIXED IN CANDIDATE; **fresh CI pending** | The UI display tick formatter correctly shows `00:01` at the 10th 0.1s tick, while the visual-audit oracle still floored `sim.elapsed` (e.g. 0.9999999999999999) and expected `00:00`. This made [run 45080079067](https://github.com/PillB/gategame/actions/runs/45080079067) fail despite the fixed UI. | Derive the audit clock from **independent integer tick count**, not from UI formatter or imprecise elapsed; assert at t=14s before R06 edit. Preserve independent agent-state/score oracle. Unit test checks 1,201 repeated fractional increments. |
+| SM-22 | P1 · IMPLEMENTED; **fresh CI pending** | One wrong touch previously required reselecting posts and reconstructing a prior map; a mistaken reversible preflight edit had no undo affordance. | `layoutWorkshopReducer` atomically records a max of 20 valid geometry states. Undo/redo round-trip fingerprint, invalid layouts fail closed, new edit kills divergent redo, and start/preset/R06 live edit erase history. Browser edits via real board click, checks preview, Undo, Redo, then unchanged score baseline. Risk: dense small-screen controls and true touch remain manual. |
+| SM-23 | P2 · IMPLEMENTED; **fresh CI pending** | Player lacked advance feedback for whether a design added detours or blocked access, risking blind trial-and-error and unsupported causal claims. | `summarizeLayoutAccess` uses *actual A* on each of 28 entrance columns*. No-belt and border-belt both have 28 reachable and mean 10 steps; full interior wall has 14 reachable; opening a single gap gives 28 with longer mean steps. UI explicitly says metric is geometry, not a final score prediction. |
+| SM-24 | P1 · OPEN | Two browser tabs have independent React memory and the same `localStorage` key. Browser `storage` events can notify another tab, but a live game must not silently accept a foreign layout and change its scored physics. | Do not silently replace the running layout; define conflict UX and test two real contexts before implementing synchronization. Relevant: [MDN storage event](https://developer.mozilla.org/en-US/docs/Web/API/Window/storage_event). |
+| SM-25 | P1 · OPEN RELEASE GATE | PR #17 remains draft with no independent approval or physical Safari/VoiceOver/200% zoom, user pilot or real share-sheet UAT. | CI passing is necessary but insufficient. Do not merge or deploy the private Sites host. Verify exact candidate SHA, reviewed screenshots, then manual acceptance. |
+
+### Fresh four-pass adversarial plan, independent of old historical status
+
+1. **Math:** 28-person per-tick conservation, stage/FIFO and immutable score baselines; new A* border/wall/gap counterexamples.
+2. **State collision:** edit↔undo↔redo↔new edit; max 20, invalid URLs, rapid double click, R06 one-token lock, auto-pause and finished debrief.
+3. **Visual:** fresh browser uses preview; canvas and precision controls both manipulate real geometry; mobile 280/360/390/430, tablets and 200% viewport emulation; no offscreen buttons or stale preview.
+4. **Release:** inspect exact run and artifacts, diff against `main`, formal independent review and physical UAT; publish only an accepted source revision.
+
+No experimental preference, engagement or virality claims may be inferred from static code or robot browser tests. Use short sessions with 5–8 uncoached novices and pre-specified success criteria before declaring gameplay perfected.
