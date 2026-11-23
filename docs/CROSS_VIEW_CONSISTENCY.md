@@ -97,3 +97,10 @@ flowchart TD
 Cross-view invariant: **fingerprint, rendered belts, local saved design, A* preview, mission picker, score and incident feed** must refer to the same effective state, with fault overlays explicitly separated from base geometry. Undo/redo are prohibited during any scored, paused or finished turn; the R06 14-second removal consumes the separate token and is never a reversible preflight action.
 
 The estimate is deliberately not the deterministic score: worker faults, moving passengers, waiting and passenger patience cannot be reconstructed from shortest paths alone. See `tests/layout-workshop.test.mjs` and `scripts/browser-smoke.mjs` for falsifiers; the latter verifies changes using actual canvas clicks and visible DOM, not merely source string existence. A future two-tab conflict UI remains an explicit OPEN gate.
+
+
+## Cross-session provenance: never replace a personal design with an unsolicited shared puzzle
+
+After every shared-URL import and **after every edit of that temporary puzzle**, cross-check the source of truth: rendered belts/fingerprint must use the temporary challenge layout while `gateflow-layout-v2` keeps the previously saved personal geometry. The new `RETO TEMPORAL` banner makes that distinction explicit, offering only two affirmative transitions: restore the saved personal layout or intentionally save the temporary geometry as the new personal one. Neither button works in a locked/finished turn, so a scored result cannot be silently reassigned to an unrelated layout. The browser test seeds a personal `2:3→3:3` belt, opens a clean `G1` challenge, verifies it survives mobile edits, restores it, then explicitly saves a new challenge layout; all assertions are against actual storage and visible fingerprints.
+
+This is distinct from the multi-tab last-writer-wins problem: external edits from a second independent tab still require a designed conflict policy.
