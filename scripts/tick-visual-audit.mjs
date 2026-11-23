@@ -107,13 +107,19 @@ async function screenshot(name, { full = false, clip = undefined } = {}) {
   await writeFile(filename, bytes);
   return createHash("sha256").update(bytes).digest("hex");
 }
-function timeLabel(seconds) {
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+// This oracle intentionally does NOT use the UI's formatTickClock or the
+// floating-point simulation elapsed. Tick 10 must display 00:01 even when
+// repeated DT additions produce 0.9999999999999999; otherwise the browser
+// test could incorrectly reject the fixed UI and preserve the original bug.
+function expectedClockAtTick(tickNumber) {
+  assert.ok(Number.isInteger(tickNumber) && tickNumber >= 0, "Invalid independent tick number");
+  const fullSeconds = Math.floor(tickNumber / 10);
+  return `${String(Math.floor(fullSeconds / 60)).padStart(2, "0")}:${String(fullSeconds % 60).padStart(2, "0")}`;
 }
-function expectedMetrics(sim, roundId) {
+function expectedMetrics(sim, roundId, tickNumber) {
   const resolved = sim.cleared + sim.failed + sim.turnedAway + sim.abandoned;
   const finished = sim.spawned === TARGET && resolved === TARGET;
-  return { time: timeLabel(sim.elapsed), cleared: sim.cleared,
+  return { time: expectedClockAtTick(tickNumber), cleared: sim.cleared,
     queued: sim.agents.filter((a) => a.stage === "queue1" || a.stage === "queue2").length,
     score: scoreShiftBreakdown({processed:sim.cleared,elapsed:scoredElapsed(roundId,sim.elapsed),
       retries:sim.retries,target:TARGET,turnedAway:sim.turnedAway,abandoned:sim.abandoned,
@@ -151,6 +157,8 @@ async function audit({ roundId, button, preset, layout:sourceLayout, breathRemov
   for (let i=0; i<maxTicks; i++) {
     // Match the pure-engine action at exactly the first eligible 14.0s tick.
     if (breathRemoval && i===140) {
+      assert.equal(await evaluate("document.querySelector('.metrics article:first-child strong')?.textContent"), "00:14",
+        "R06 must visibly show the eligible 14-second boundary, not 00:13");
       assert.equal(await evaluate("document.querySelector('.breath-banner')?.textContent.includes('Un cambio disponible')"),true,
         "One-time passage must be announced before use");
       assert.equal(await evaluate("document.querySelector('.presets button')?.disabled"),true,
@@ -178,7 +186,7 @@ async function audit({ roundId, button, preset, layout:sourceLayout, breathRemov
     }
     sim = tick(sim, layout, roundId);
     const ui = await evaluate("window.__gateflowAudit.step()");
-    const expected = expectedMetrics(sim, roundId);
+    const expected = expectedMetrics(sim, roundId, i + 1);
     assert.deepEqual(ui, expected, `Visual/engine divergence ${roundId} tick ${i+1}`);
     assert.equal(new Set(sim.events.map((event)=>event.id)).size,sim.events.length,
       `${roundId} duplicated incident ID at tick ${i+1}`);
@@ -212,7 +220,7 @@ async function audit({ roundId, button, preset, layout:sourceLayout, breathRemov
   }
   assert.equal(sim.running,false,`${roundId} did not finish within ${maxTicks*DT}s`);
   if(expectedElapsed!==null)assert.equal(+sim.elapsed.toFixed(1),expectedElapsed);
-  assert.equal(expectedMetrics(sim,roundId).score,expectedScore);
+  assert.equal(expectedMetrics(sim,roundId,ticks).score,expectedScore);
   assert.ok(hashes.size > ticks/3,`${roundId} canvas appears frozen: ${hashes.size}/${ticks} unique frames`);
   if (breathRemoval) {
     assert.match(await evaluate("document.querySelector('.debrief')?.textContent"),/desafío compartido conserva tu plano/i);
