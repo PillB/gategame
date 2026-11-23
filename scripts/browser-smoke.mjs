@@ -152,6 +152,10 @@ try{
   const otherLayout=await evaluate("document.querySelector('.toolbar .label')?.textContent");
   assert.notEqual(startLayout,otherLayout,"Preset did not change the layout");
   await clickButton("División guiada");
+  // A clear corridor is the mathematical control: a single interior belt
+  // increases the affected starting route length by two cells. Guided already
+  // has detours, so an arbitrary extra belt may correctly change no summary.
+  await clickButton("Espacio libre");
   // A brand-new player sees a measurable, non-scoring A* access preview.
   // One actual canvas edit must update that preview and be undoable; all
   // metrics, model geometry and saved baseline must return after Undo.
@@ -181,6 +185,9 @@ try{
     "Redo failed to restore the edited layout");
   await clickButton("Deshacer");
   assert.equal(await evaluate("document.querySelector('.toolbar .label')?.textContent"),beforeWorkshop);
+  await clickButton("División guiada");
+  assert.equal(await evaluate("document.querySelector('.layout-history button')?.disabled"), true,
+    "Changing preset must clear irrelevant Undo history");
   // Run→Running must lock layout in the same render even at exact t=0.
   // Freeze only the CI wall-clock dispatch, never the simulation DT or seed.
   await evaluate("window.__gateflowFreezeTimers=true");
