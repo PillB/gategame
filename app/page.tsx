@@ -483,6 +483,9 @@ export default function Home() {
   const edges = layoutEditor.edges as [Edge[], Edge[]];
   const [roundId, setRoundId] = useState(DEFAULT_ROUND);
   const [storageReady, setStorageReady] = useState(false);
+  // Challenge imports are temporary drafts: opening a friend's link must
+  // never silently overwrite the personal layout saved in this browser.
+  const [temporaryChallenge, setTemporaryChallenge] = useState(false);
   const [sim, setSim] = useState<Sim>(blank);
   const [selected, setSelected] = useState<{ grid: Grid; node: string } | null>(null);
   const [message, setMessage] = useState("Las cintas impiden el paso; los pasajeros caminan por las celdas libres del corredor.");
@@ -510,6 +513,7 @@ export default function Home() {
       if (restored) {
         editLayout({ type: "load", layout: restored });
         if (challenge) {
+          setTemporaryChallenge(true);
           const targetScore = parseChallengeScore(query.get("beat"));
           if (targetScore !== null && challengeRound !== null) setChallengeTarget({ score: targetScore, fingerprint: layoutFingerprint(challenge) });
           setMessage(challengeRound === null
@@ -527,8 +531,8 @@ export default function Home() {
   }, []);
   useEffect(() => {
     edgeRef.current = edges;
-    if (storageReady) safeWrite("gateflow-layout-v2", JSON.stringify(edges));
-  }, [edges, storageReady]);
+    if (storageReady && !temporaryChallenge) safeWrite("gateflow-layout-v2", JSON.stringify(edges));
+  }, [edges, storageReady, temporaryChallenge]);
   useEffect(() => {
     if (!sim.running) return;
     const timer = window.setInterval(() => setSim((state) => tick(state, edgeRef.current, roundId)), simulationInterval(pace, DT));
@@ -668,6 +672,29 @@ export default function Home() {
     setSelected(null);
     setMessage("Cambio rehecho. La vista previa de rutas se actualizó.");
   }
+  function saveTemporaryLayout() {
+    if (!temporaryChallenge || gameLocked || finished) return;
+    setTemporaryChallenge(false);
+    setMessage("Guardaste este plano de reto como tu diseño local. Los próximos cambios también se guardarán aquí.");
+  }
+  function returnToPersonalLayout() {
+    if (!temporaryChallenge || gameLocked || finished) return;
+    let restored: [Edge[], Edge[]] | null = null;
+    try {
+      restored = sanitizeLayoutGroups(JSON.parse(safeRead("gateflow-layout-v2") ?? "null"), POST_COLS, POST_ROWS) as [Edge[], Edge[]] | null;
+    } catch { restored = null; }
+    editLayout({ type: "load", layout: restored ?? [[...GUIDED[0]], [...GUIDED[1]]] });
+    setTemporaryChallenge(false);
+    setChallengeTarget(null);
+    setSelected(null);
+    setStartingLayout(null);
+    breathSpentRef.current = false;
+    setSim(blank());
+    const url = new URL(window.location.href);
+    for (const key of ["layout", "beat", "round", "rules"]) url.searchParams.delete(key);
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    setMessage("Regresaste a tu plano guardado. El reto temporal no reemplazó tu diseño.");
+  }
   function commitBest() {
     if (finished && score > bestScore) { setBestScore(score); safeWrite(roundId === DEFAULT_ROUND ? "gateflow-best-v2" : `gateflow-best-${roundId}-waves-1`, String(score)); }
   }
@@ -689,6 +716,7 @@ export default function Home() {
   function preset(mode: "guided" | "serpentine" | "clear") {
     if (gameLocked) return;
     captureFinishedRun(); breathSpentRef.current = false; setStartingLayout(null); setSim(blank()); setChallengeTarget(null);
+    setTemporaryChallenge(false);
     editLayout({ type: "load", layout: mode === "guided" ? [[...GUIDED[0]], [...GUIDED[1]]] : mode === "serpentine" ? [[...SERPENTINE[0]], [...SERPENTINE[1]]] : [[], []] });
     setSelected(null); setCopied(false); setShareFallback(null);
     setMessage(`Diseño «${mode === "clear" ? "Espacio libre" : mode === "serpentine" ? "Serpentina" : "División guiada"}» cargado. Las cintas son obstáculos; los corredores punteados son transitables.`);
@@ -774,6 +802,11 @@ export default function Home() {
         {round.waves.length > 0 && <div className="flight-board" role="status" aria-live="off"><strong>✈ TABLERO DE LLEGADAS</strong><span>{nextWave ? `${nextWave.label} · ${nextWave.count} viajeros en ${nextWaveSeconds} s` : `Todos los vuelos aterrizaron · ${sim.spawned}/${TARGET} viajeros en sala`}</span><small>{lastWave ? lastWave.surprise : round.payoff}</small><div className="flight-timeline" aria-label="Horarios de vuelos">{round.waves.map((wave) => <span key={wave.at} className={sim.elapsed >= wave.at ? "landed" : "upcoming"}>{timeLabel(wave.at)} · {wave.count}</span>)}</div></div>}
         {roundId === "r06" && <div className="breath-banner" role="status"><strong>📖 PASAJE DE RESPIRO · {sim.breathEdits}/1 usado</strong><span>{sim.breathEdits ? "El corredor quedó abierto. Ya usaste tu único cambio en marcha." : finished ? "Turno cerrado; guardaste el cambio de respiro." : !breathOpen ? "Disponible desde 00:14: podrás retirar una cinta. No podrás añadir barreras." : "¡Un cambio disponible! Pausa el turno cuando quieras y retira una cinta existente. No caduca."}</span></div>}
         {challengeNotice && <p className="challenge-ribbon" role="status"><b>RETO ENTRE AMIGOS</b><span>{challengeNotice}</span></p>}
+        {temporaryChallenge && <section className="temporary-layout-note" aria-label="Plano temporal de un reto" role="status">
+          <span><strong>RETO TEMPORAL</strong> · Puedes jugar y editar sin perder tu plano guardado.</span>
+          <div><button type="button" disabled={gameLocked || finished} onClick={returnToPersonalLayout}>Volver a mi plano</button>
+          <button type="button" disabled={gameLocked || finished} onClick={saveTemporaryLayout}>Guardar este plano</button></div>
+        </section>}
         <p className="mobile-map-hint">Desliza el plano hacia los lados para ver todos los postes. También puedes usar las flechas y Enter con el teclado.</p>
         {!finished && <button type="button" className="run mobile-run-early" onClick={run}>{sim.running ? "Ⅱ  Pausar turno" : sim.elapsed ? "▶  Reanudar turno" : "▶  Iniciar turno"}</button>}
         <div className={`canvas-wrap ${finished ? "complete" : ""}`}>
